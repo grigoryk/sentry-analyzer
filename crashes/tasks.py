@@ -1,13 +1,44 @@
 from celery import shared_task
-from .models import Event, EventGroup, EventTag, EventTagKeyed, Stacktrace
+from .models import AssignedCategory, Category, Event, EventGroup, EventTag, EventTagKeyed, Stacktrace
+
+from django.db import transaction, IntegrityError
+from django.core.exceptions import MultipleObjectsReturned
 
 import requests
 
 ENDPOINT = "https://sentry.prod.mozaws.net/api/0"
 EVENTS_ENDPOINT = ENDPOINT + "/projects/operations/fenix/events/"
-TOKEN = "fd8f03e62b56422ea0a3a5cda26115d38d4f61fdfdc94df1a00ad9f7fd730459"
+TOKEN = "716efdd8ce4942eab62e31a18e29e44b0f5efa6e701747d1876b521a0466d2fc"
 HEADERS = {"Authorization": "Bearer " + TOKEN}
 
+# Local processing:
+@shared_task
+def assign_package_categories():
+    for e in Event.objects.all():
+        assign_package_categories_event.delay(e.id)
+
+@shared_task
+def assign_package_categories_event(event_id):
+    event = Event.objects.get(id=event_id)
+    for s in event.stacktrace_set.all():
+        mozilla_set = set()
+        for line in s.stacktrace.split():
+            if line.startswith("mozilla"):
+                parts = line.split(".")
+                package = ".".join((p for p in parts if not p[0].isupper() and p[0].isalpha()))
+                mozilla_set.add(package)
+        for package in mozilla_set:
+            try:
+                cat = Category(name = package)
+                cat.save()
+            except IntegrityError:
+                cat = Category.objects.filter(name = package).first()
+
+            if AssignedCategory.objects.filter(group = event.group, category = cat).count() == 0:
+                AssignedCategory(group = event.group, category = cat).save()
+
+
+# Sentry integration:
 @shared_task
 def fetch_all():
     endpoint = EVENTS_ENDPOINT

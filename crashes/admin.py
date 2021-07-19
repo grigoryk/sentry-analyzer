@@ -1,6 +1,7 @@
 from django.contrib import admin
+from django.db.models import Count
 
-from .models import Category, Event, Stacktrace, EventTag, EventGroup, EventTagKeyed
+from .models import AssignedCategory, Category, Event, Stacktrace, EventTag, EventGroup, EventTagKeyed
 
 class StacktraceInline(admin.TabularInline):
     model = Stacktrace
@@ -31,5 +32,15 @@ class EventTagKeyedAdmin(admin.ModelAdmin):
 
 admin.site.register(EventTagKeyed, EventTagKeyedAdmin)
 
-admin.site.register(Category)
+class CategoryAdmin(admin.ModelAdmin):
+    ordering = ('name',)
+
+admin.site.register(Category, CategoryAdmin)
+
+class AssignedCategoryAdmin(admin.ModelAdmin):
+    list_display = ('group', 'category')
+    list_filter = ('category',)
+
+admin.site.register(AssignedCategory, AssignedCategoryAdmin)
+
 admin.site.register(Stacktrace)
