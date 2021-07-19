@@ -3,6 +3,9 @@ Experiments around analyzing sentry crashes
 
 ## Local usage, quick notes
 - install and launch rabbitmq
+- git clone && cd into project
+- create python virtualenv: `python3 -m venv venv`
+- activate it: `source venv/bin/activate`
 - Install python libs: `pip install -r requirements.txt`
 - Setup the local db: `./manage.py migrate` && `./manage.py createsuperuser`
 - Set Sentry API token in `facs/crashes/tasks.py#TOKEN`
