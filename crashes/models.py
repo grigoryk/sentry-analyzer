@@ -1,10 +1,21 @@
 from django.db import models
+import functools
 
 class Category(models.Model):
     name = models.CharField(max_length=255, unique=True)
 
+    class Meta:
+        ordering = ['name']
+
     def __str__(self):
         return self.name
+
+    def group_count(self):
+        return self.eventgroup_set.all().count()
+
+    def event_count(self):
+        # todo ugh, this should be sql instead
+        return functools.reduce(lambda sum, eg: sum + eg.event_count(), self.eventgroup_set.all(), 0)
 
 class EventGroup(models.Model):
     group_id = models.IntegerField()

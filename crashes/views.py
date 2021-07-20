@@ -1,5 +1,9 @@
 from django.shortcuts import render
+from .models import Category
 
 # Create your views here.
 def packages(request):
-    return render(request, 'crashes/packages.html', {'data': {}})
+    packages = Category.objects.all()
+    return render(request, 'crashes/packages.html', {
+        'packages': packages
+    })
