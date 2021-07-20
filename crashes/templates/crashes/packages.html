@@ -52,6 +52,18 @@
 {% block scripts %}
     <script type="text/javascript">
         var globalTimeRange;
+        var globalOlsCache = {};
+        const cyrb53 = function(str, seed = 0) {
+            let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+            for (let i = 0, ch; i < str.length; i++) {
+                ch = str.charCodeAt(i);
+                h1 = Math.imul(h1 ^ ch, 2654435761);
+                h2 = Math.imul(h2 ^ ch, 1597334677);
+            }
+            h1 = Math.imul(h1 ^ (h1>>>16), 2246822507) ^ Math.imul(h2 ^ (h2>>>13), 3266489909);
+            h2 = Math.imul(h2 ^ (h2>>>16), 2246822507) ^ Math.imul(h1 ^ (h1>>>13), 3266489909);
+            return 4294967296 * (2097151 & h2) + (h1>>>0);
+        };
         function Package(package) {
             var self = this;
             self.name = package.name;
@@ -66,17 +78,43 @@
                     return delta <= timeRangeLimit;
                 });
             });
+            self.countCache = {};
             self.info_count = ko.computed(function() {
-                return self.limitedDates().reduce((sum, val) => sum + val.info, 0);
+                var dates = self.limitedDates();
+                var key = 'info' + cyrb53(JSON.stringify(dates));
+                if (self.countCache.hasOwnProperty(key)) {
+                    return self.countCache[key];
+                } else {
+                    var res = self.limitedDates().reduce((sum, val) => sum + val.info, 0);
+                    self.countCache[key] = res;
+                    return res;
+                }
             });
             self.fatal_count = ko.computed(function() {
-                return self.limitedDates().reduce((sum, val) => sum + val.fatal, 0);
+                var dates = self.limitedDates();
+                var key = 'fatal' + cyrb53(JSON.stringify(dates));
+                if (self.countCache.hasOwnProperty(key)) {
+                    return self.countCache[key];
+                } else {
+                    var res = self.limitedDates().reduce((sum, val) => sum + val.fatal, 0);
+                    self.countCache[key] = res;
+                    return res;
+                }
             });
+
             self.info_trend = ko.computed(function() {
-                return trendOLS('info');
+                if (globalTimeRange() == 1) {
+                    return 0;
+                } else {
+                    return trendOLS(self.limitedDates(), 'info');
+                }
             });
             self.fatal_trend = ko.computed(function() {
-                return trendOLS('fatal');
+                if (globalTimeRange() == 1) {
+                    return 0;
+                } else {
+                    return trendOLS(self.limitedDates(), 'fatal');
+                }
             });
 
             self.info_raw = ko.computed(() => {
@@ -94,8 +132,12 @@
                 return $.map(dx, (d) => d[key]);
             }
 
-            function trendOLS(key) {
-                var dates = self.limitedDates();
+            function trendOLS(dates, key) {
+                var dates_hash = key + cyrb53(JSON.stringify(dates));
+                if (globalOlsCache.hasOwnProperty(dates_hash)) {
+                    return globalOlsCache[dates_hash];
+                }
+
                 var xset = [...Array(dates.length + 1).keys()].slice(1);
                 var yset = rawValues(dates, key);
 
@@ -113,7 +155,9 @@
                     var next = ols[1][i + 1];
                     diffs.push(next - current);
                 });
-                return Math.round(1000 * diffs.reduce((sum, v) => sum + v, 0) / diffs.length) / 1000;
+                var res = Math.round(1000 * diffs.reduce((sum, v) => sum + v, 0) / diffs.length) / 1000;
+                globalOlsCache[dates_hash] = res;
+                return res;
             }
         }
 
