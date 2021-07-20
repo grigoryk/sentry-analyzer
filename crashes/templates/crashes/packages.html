@@ -9,36 +9,36 @@
 
             <div class="col-md-4" style="padding-top: 20px">
                 <div class="form-inline">
-                    <label class="sr-only" for="packageSearch">Search</label>
-                    <input data-bind="textInput: search" type="text" class="form-control" id="packageSearch" placeholder="Search">
+                    <label class="sr-only" for="packageSearch">Package Search</label>
+                    <input data-bind="textInput: search" type="text" class="form-control" id="packageSearch" placeholder="Package Search">
                 </div>
             </div>
         </div>
         <table class="table table-hover">
             <thead>
                 <tr>
-                    <th>Package ID</th>
-                    <th>Info count</th>
-                    <th>Info trend</th>
-                    <th>Fatal count</th>
-                    <th>Fatal trend</th>
+                    <th data-bind="click: sortByPackage">Package ID <span class="glyphicon" data-bind="visible: sortBy() == 'package', css: {'glyphicon-arrow-up': !packageSortDesc(), 'glyphicon-arrow-down': packageSortDesc() }"></span></th>
+                    <th data-bind="click: sortByInfo">Infos <span class="glyphicon" data-bind="visible: sortBy() == 'info', css: {'glyphicon-arrow-up': !infoSortDesc(), 'glyphicon-arrow-down': infoSortDesc() }"></span></th>
+                    <th data-bind="click: sortByInfoTrend">Info trend <span class="glyphicon" data-bind="visible: sortBy() == 'infoTrend', css: {'glyphicon-arrow-up': !infoTrendSortDesc(), 'glyphicon-arrow-down': infoTrendSortDesc() }"></span></th>
+                    <th data-bind="click: sortByFatal">Fatals <span class="glyphicon" data-bind="visible: sortBy() == 'fatal', css: {'glyphicon-arrow-up': !fatalSortDesc(), 'glyphicon-arrow-down': fatalSortDesc() }"></span></th>
+                    <th data-bind="click: sortByFatalTrend">Fatal trend <span class="glyphicon" data-bind="visible: sortBy() == 'fatalTrend', css: {'glyphicon-arrow-up': !fatalTrendSortDesc(), 'glyphicon-arrow-down': fatalTrendSortDesc() }"></span></th>
                 </tr>
             </thead>
-            <tbody data-bind="foreach: filteredPackages">
+            <tbody data-bind="foreach: sortedPackages">
                 <tr>
                     <td><a data-bind="text: name, attr: { href: url }"></a></td>
                     <td data-bind="text: info_count"></td>
                     <td>
-                        <span class="label" data-bind="css: {'label-warning': info_trend() > 0, 'label-success': info_trend() < 0 }">
-                            <span class="glyphicon" data-bind="css: {'glyphicon-arrow-up': info_trend() > 0, 'glyphicon-arrow-down': info_trend() < 0}"></span>
-                            <span data-bind="text: info_trend"></span>
+                        <span class="label" data-bind="css: {'label-warning': info_trend() > 0, 'label-success': info_trend() < 0, 'label-default': info_trend() == 0 }">
+                            <span class="glyphicon" data-bind="css: {'glyphicon-arrow-up': info_trend() > 0, 'glyphicon-arrow-down': info_trend() < 0, 'glyphicon-option-horizontal': info_trend() == 0}"></span>
+                            <span data-bind="text: info_trend, visible: info_trend() != 0"></span>
                         </span>
                     </td>
                     <td data-bind="text: fatal_count"></td>
                     <td>
-                        <span class="label" data-bind="css: {'label-warning': fatal_trend() > 0, 'label-success': fatal_trend() < 0 }">
-                            <span class="glyphicon" data-bind="css: {'glyphicon-arrow-up': fatal_trend() > 0, 'glyphicon-arrow-down': fatal_trend() < 0}"></span>
-                            <span data-bind="text: fatal_trend"></span>
+                        <span class="label" data-bind="css: {'label-warning': fatal_trend() > 0, 'label-success': fatal_trend() < 0, 'label-default': fatal_trend() == 0 }">
+                            <span class="glyphicon" data-bind="css: {'glyphicon-arrow-up': fatal_trend() > 0, 'glyphicon-arrow-down': fatal_trend() < 0, 'glyphicon-option-horizontal': fatal_trend() == 0}"></span>
+                            <span data-bind="text: fatal_trend, visible: fatal_trend() != 0"></span>
                         </span>
                     </td>
                 </tr>
@@ -61,27 +61,38 @@
                 return self.dates().reduce((sum, val) => sum + val.fatal, 0);
             });
             self.info_trend = ko.computed(function() {
-                var oldest = self.dates()[self.dates().length - 1];
-                var newest = self.dates()[1]; // latest full date
-                if (oldest.info == 0) {
-                    return 100;
-                } else {
-                    return Math.round(((newest.info - oldest.info) / oldest.info) * 100);
-                }
+                return trend('info');
             });
             self.fatal_trend = ko.computed(function() {
-                var oldest = self.dates()[self.dates().length - 1];
-                var newest = self.dates()[1]; // latest full date
-                if (oldest.info == 0) {
-                    return 100;
-                } else {
-                    return Math.round(((newest.fatal - oldest.fatal) / oldest.fatal) * 100);
-                }
+                return trend('fatal');
             });
+
+            function trend(key) {
+                var dates = self.dates();
+                var diffs = [];
+                dates.forEach((current, i) => {
+                    if (i == (dates.length - 1)) {
+                        return;
+                    }
+
+                    var next = dates[i + 1];
+                    diffs.push(next[key] - current[key]);
+                });
+                return Math.round(1000 * diffs.reduce((sum, v) => sum + v, 0) / diffs.length) / 1000;
+            }
         }
 
         function VM(packages) {
             var self = this;
+
+            // package, info, fatal, infoTrend, fatalTrend
+            self.sortBy = ko.observable("fatalTrend");
+            self.infoSortDesc = ko.observable(true);
+            self.fatalSortDesc = ko.observable(true);
+            self.packageSortDesc = ko.observable(false);
+            self.infoTrendSortDesc = ko.observable(true);
+            self.fatalTrendSortDesc = ko.observable(true);
+
             self.search = ko.observable();
             self.packages = ko.observableArray(
                 $.map(packages, function(p) { return new Package(p) })
@@ -97,6 +108,69 @@
                     });
                 }
             });
+
+            self.sortedPackages = ko.computed(() => {
+                // is 'observableArray' wrapper going to cause problems?
+                var filtered = ko.observableArray(self.filteredPackages());
+                return filtered.sorted((left, right) => {
+                    if (self.sortBy() == "package") {
+                        if (self.packageSortDesc()) {
+                            return left.name < right.name;
+                        } else {
+                            return left.name > right.name;
+                        }
+
+                    } else if (self.sortBy() == "info") {
+                        if (self.infoSortDesc()) {
+                            return left.info_count() < right.info_count();
+                        } else {
+                            return left.info_count() > right.info_count();
+                        }
+
+                    } else if (self.sortBy() == "fatal") {
+                        if (self.fatalSortDesc()) {
+                            return left.fatal_count() < right.fatal_count();
+                        } else {
+                            return left.fatal_count() > right.fatal_count();
+                        }
+
+                    } else if (self.sortBy() == "infoTrend") {
+                        if (self.infoTrendSortDesc()) {
+                            return left.info_trend() < right.info_trend();
+                        } else {
+                            return left.info_trend() > right.info_trend();
+                        }
+
+                    } else if (self.sortBy() == "fatalTrend") {
+                        if (self.fatalTrendSortDesc()) {
+                            return left.fatal_trend() < right.fatal_trend();
+                        } else {
+                            return left.fatal_trend() > right.fatal_trend();
+                        }
+                    }
+                });
+            });
+
+            self.sortByInfo = () => {
+                self.sortBy("info");
+                self.infoSortDesc(!self.infoSortDesc());
+            }
+            self.sortByFatal = () => {
+                self.sortBy("fatal");
+                self.fatalSortDesc(!self.fatalSortDesc());
+            }
+            self.sortByPackage = () => {
+                self.sortBy("package");
+                self.packageSortDesc(!self.packageSortDesc());
+            }
+            self.sortByInfoTrend = () => {
+                self.sortBy("infoTrend");
+                self.infoTrendSortDesc(!self.infoTrendSortDesc());
+            }
+            self.sortByFatalTrend = () => {
+                self.sortBy("fatalTrend");
+                self.fatalTrendSortDesc(!self.fatalTrendSortDesc());
+            }
         }
 
         ko.applyBindings(VM(
