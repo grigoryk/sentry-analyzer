@@ -1,0 +1,100 @@
+{% extends "crashes/base.html" %}
+
+{% block title %}Sentry analyzer: package {{ package.name}}{% endblock %}
+
+{% block content %}
+<div class="jumbotron">
+    <div class="row">
+        <div class="col-md-8">
+            <h1><a href="{% url 'packages' %}">&larr;</a>{{ package.name }}</h1>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12" data-bind="foreach: sorted_groups">
+            <h2>
+                <a data-bind="attr: { href: url }">Group of <span data-bind="text: event_count"></span> events</a>
+            </h2>
+
+            <div data-bind="using: active_event">
+                <a data-bind="attr: { href: url }">
+                    <strong data-bind="text: message"></strong>
+                </a>
+                <div>
+                    <code data-bind="text: stacktrace"></code>
+                </div>
+            </div>
+
+            <nav>
+                <ul class="pager">
+                    <li><a data-bind="visible: active_event_index() > 0, click: previousEvent" href="#">Previous</a></li>
+                    <li><span data-bind="text: active_event_index() + 1"></span></li>
+                    <li><a data-bind="visible: active_event_index() < (event_count - 1), click: nextEvent" href="#">Next</a></li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="text/javascript">
+    function Event(data) {
+        var self = this;
+        self.id = data.id;
+        self.url = data.url;
+        self.message = data.message;
+        self.stacktrace = data.stacktrace;
+        self.label = ko.computed(function() {
+            return "Event #" + self.id;
+        })
+    }
+
+    function Group(data) {
+        var self = this;
+        self.id = data.id;
+        self.url = data.url;
+        self.event_count = data.event_count;
+        self.events = $.map(data.events, function(e) { return new Event(e) });
+        self.active_event_index = ko.observable(0);
+        self.active_event = ko.computed(function() {
+            return self.events[self.active_event_index()];
+        })
+    }
+
+    function VM(groups) {
+        var self = this;
+        self.groups = ko.observableArray(
+            $.map(groups, function(g) { return new Group(g) })
+        );
+        self.sorted_groups = ko.computed(function() {
+            return self.groups.sorted(function (left, right) {
+                return left.event_count < right.event_count;
+            })
+        });
+        self.previousEvent = function(group) {
+            if (group.active_event_index() > 0) {
+                group.active_event_index(group.active_event_index() - 1);
+            }
+        };
+        self.nextEvent = function(group) {
+            if (group.active_event_index() < group.event_count) {
+                group.active_event_index(group.active_event_index() + 1);
+            }
+        };
+    }
+    ko.applyBindings(VM(
+        [
+            {% for group in package.eventgroup_set.all %}
+            { id: '{{ group.group_id }}', event_count: {{ group.event_count }}, url: 'https://sentry.prod.mozaws.net/operations/firefox-nightly/issues/{{ group.group_id }}', events:
+                [
+                {% for event in group.event_set.all %}
+                    { id: '{{ event.id }}', url: 'https://sentry.prod.mozaws.net/operations/firefox-nightly/issues/{{ group.group_id }}/events/{{ event.sentry_id }}/', message: '{{ event.message|escapejs }}', stacktrace: '{{ event.stacktrace_set.all.0.stacktrace|escapejs }}'},
+                {% endfor %}
+                ]
+            },
+            {% endfor %}
+        ]
+    ));
+</script>
+{% endblock %}

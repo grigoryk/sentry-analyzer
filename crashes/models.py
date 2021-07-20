@@ -68,6 +68,9 @@ class Event(models.Model):
     message = models.CharField(max_length=500, null=True, blank=True)
     tags = models.ManyToManyField(EventTagKeyed)
 
+    class Meta:
+        ordering = ['-event_created',]
+
     def __str__(self):
         return f"{self.sentry_id} : {self.message}"
 
