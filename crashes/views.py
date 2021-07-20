@@ -30,7 +30,7 @@ def packages(request):
                         package['dates'][event.event_created.date().isoformat()]['fatal'] += 1
             packages.append(package)
 
-        cache.set('computed_packages', packages, 60 * 30)
+        cache.set('computed_packages', packages, 60 * 60 * 3)
 
         return render(request, 'crashes/packages.html', {
             'packages': packages
