@@ -13,9 +13,16 @@ class Category(models.Model):
     def group_count(self):
         return self.eventgroup_set.all().count()
 
+    # todo ugh, these should be sql instead
+
     def event_count(self):
-        # todo ugh, this should be sql instead
         return functools.reduce(lambda sum, eg: sum + eg.event_count(), self.eventgroup_set.all(), 0)
+
+    def event_info_count(self):
+        return functools.reduce(lambda sum, eg: sum + eg.event_info_count(), self.eventgroup_set.all(), 0)
+
+    def event_fatal_count(self):
+        return functools.reduce(lambda sum, eg: sum + eg.event_fatal_count(), self.eventgroup_set.all(), 0)
 
 class EventGroup(models.Model):
     group_id = models.IntegerField()
@@ -23,6 +30,12 @@ class EventGroup(models.Model):
 
     def __str__(self):
         return f"{self.group_id} (events: {self.event_count()})"
+
+    def event_info_count(self):
+        return self.event_set.filter(tags__value='info', tags__event_tag__key='level').count()
+
+    def event_fatal_count(self):
+        return self.event_set.exclude(tags__value='info', tags__event_tag__key='level').count()
 
     def event_count(self):
         return self.event_set.all().count()
@@ -67,12 +80,17 @@ class Event(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     message = models.CharField(max_length=500, null=True, blank=True)
     tags = models.ManyToManyField(EventTagKeyed)
+    info = models.BooleanField(null=True, blank=True)
 
     class Meta:
         ordering = ['-event_created',]
 
     def is_info(self):
-        return self.tags.filter(value='info', event_tag__key='level').count() > 0
+        if self.info is None:
+            self.info = self.tags.filter(value='info', event_tag__key='level').count() > 0
+            return self.info
+        else:
+            return self.info
 
     def __str__(self):
         return f"{self.sentry_id} : {self.message}"

@@ -18,15 +18,29 @@
             <thead>
                 <tr>
                     <th>Package ID</th>
-                    <th>Group count</th>
-                    <th>Event count</th>
+                    <th>Info count</th>
+                    <th>Info trend</th>
+                    <th>Fatal count</th>
+                    <th>Fatal trend</th>
                 </tr>
             </thead>
             <tbody data-bind="foreach: filteredPackages">
                 <tr>
                     <td><a data-bind="text: name, attr: { href: url }"></a></td>
-                    <td data-bind="text: group_count"></td>
-                    <td data-bind="text: event_count"></td>
+                    <td data-bind="text: info_count"></td>
+                    <td>
+                        <span class="label" data-bind="css: {'label-warning': info_trend() > 0, 'label-success': info_trend() < 0 }">
+                            <span class="glyphicon" data-bind="css: {'glyphicon-arrow-up': info_trend() > 0, 'glyphicon-arrow-down': info_trend() < 0}"></span>
+                            <span data-bind="text: info_trend"></span>
+                        </span>
+                    </td>
+                    <td data-bind="text: fatal_count"></td>
+                    <td>
+                        <span class="label" data-bind="css: {'label-warning': fatal_trend() > 0, 'label-success': fatal_trend() < 0 }">
+                            <span class="glyphicon" data-bind="css: {'glyphicon-arrow-up': fatal_trend() > 0, 'glyphicon-arrow-down': fatal_trend() < 0}"></span>
+                            <span data-bind="text: fatal_trend"></span>
+                        </span>
+                    </td>
                 </tr>
             </tbody>
         </table>
@@ -35,10 +49,43 @@
 
 {% block scripts %}
     <script type="text/javascript">
+        function Package(package) {
+            var self = this;
+            self.name = package.name;
+            self.url = package.url;
+            self.dates = ko.observableArray(package.dates);
+            self.info_count = ko.computed(function() {
+                return self.dates().reduce((sum, val) => sum + val.info, 0);
+            });
+            self.fatal_count = ko.computed(function() {
+                return self.dates().reduce((sum, val) => sum + val.fatal, 0);
+            });
+            self.info_trend = ko.computed(function() {
+                var oldest = self.dates()[self.dates().length - 1];
+                var newest = self.dates()[1]; // latest full date
+                if (oldest.info == 0) {
+                    return 100;
+                } else {
+                    return Math.round(((newest.info - oldest.info) / oldest.info) * 100);
+                }
+            });
+            self.fatal_trend = ko.computed(function() {
+                var oldest = self.dates()[self.dates().length - 1];
+                var newest = self.dates()[1]; // latest full date
+                if (oldest.info == 0) {
+                    return 100;
+                } else {
+                    return Math.round(((newest.fatal - oldest.fatal) / oldest.fatal) * 100);
+                }
+            });
+        }
+
         function VM(packages) {
             var self = this;
             self.search = ko.observable();
-            self.packages = ko.observableArray(packages);
+            self.packages = ko.observableArray(
+                $.map(packages, function(p) { return new Package(p) })
+            );
 
             self.filteredPackages = ko.computed(function() {
                 if (!self.search()) {
@@ -55,7 +102,13 @@
         ko.applyBindings(VM(
             [
                 {% for package in packages %}
-                { name: '{{ package.name }}', url: '{% url 'package' package.name %}', group_count: '{{ package.group_count }}', event_count: '{{ package.event_count }}'},
+                { name: '{{ package.name }}', url: '{% url 'package' package.name %}',
+                    dates: [
+                    {% for date, counts in package.dates.items %}
+                        { date: '{{ date }}', info: {{ counts.info }}, fatal : {{ counts.fatal }} },
+                    {% endfor %}
+                    ]
+                },
                 {% endfor %}
             ]
         ));
