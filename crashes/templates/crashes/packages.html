@@ -11,6 +11,8 @@
                 <div class="form-inline">
                     <label class="sr-only" for="packageSearch">Package Search</label>
                     <input data-bind="textInput: search" type="text" class="form-control" id="packageSearch" placeholder="Package Search">
+                    <label for="timeRange">Past <span data-bind="text: timeRange"></span> <span data-bind="text: timeRange() == 1 ? 'day' : 'days'"></span></label>
+                    <input id="timeRange" type="range" min="1" max="30" data-bind="value: timeRange, valueUpdate: 'input'">
                 </div>
             </div>
         </div>
@@ -49,16 +51,26 @@
 
 {% block scripts %}
     <script type="text/javascript">
+        var globalTimeRange;
         function Package(package) {
             var self = this;
             self.name = package.name;
             self.url = package.url;
             self.dates = ko.observableArray(package.dates);
+            self.limitedDates = ko.computed(() => {
+                var now = Date.now();
+                return ko.utils.arrayFilter(self.dates(), (date) => {
+                    var d = Date.parse(date.date);
+                    var delta = Math.floor((now - d) / (1000 * 60 * 60 * 24));
+                    var timeRangeLimit = globalTimeRange();
+                    return delta <= timeRangeLimit;
+                });
+            });
             self.info_count = ko.computed(function() {
-                return self.dates().reduce((sum, val) => sum + val.info, 0);
+                return self.limitedDates().reduce((sum, val) => sum + val.info, 0);
             });
             self.fatal_count = ko.computed(function() {
-                return self.dates().reduce((sum, val) => sum + val.fatal, 0);
+                return self.limitedDates().reduce((sum, val) => sum + val.fatal, 0);
             });
             self.info_trend = ko.computed(function() {
                 return trend('info');
@@ -68,7 +80,7 @@
             });
 
             function trend(key) {
-                var dates = self.dates();
+                var dates = self.limitedDates();
                 var diffs = [];
                 dates.forEach((current, i) => {
                     if (i == (dates.length - 1)) {
@@ -84,6 +96,9 @@
 
         function VM(packages) {
             var self = this;
+
+            self.timeRange = ko.observable(30);
+            globalTimeRange = self.timeRange;
 
             // package, info, fatal, infoTrend, fatalTrend
             self.sortBy = ko.observable("fatalTrend");
