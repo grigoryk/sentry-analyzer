@@ -71,6 +71,9 @@ class Event(models.Model):
     class Meta:
         ordering = ['-event_created',]
 
+    def is_info(self):
+        return self.tags.filter(value='info', event_tag__key='level').count() > 0
+
     def __str__(self):
         return f"{self.sentry_id} : {self.message}"
 

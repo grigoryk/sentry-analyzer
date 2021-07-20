@@ -5,14 +5,20 @@
 {% block content %}
 <div class="jumbotron">
     <div class="row">
-        <div class="col-md-8">
+        <div class="col-md-12">
             <h1><a href="{% url 'packages' %}">&larr;</a>{{ package.name }}</h1>
         </div>
     </div>
 
     <div class="row">
-        <div class="col-md-12" data-bind="foreach: sorted_groups">
+        <p>Exclude infos: <input type="checkbox" data-bind="checked: excludeInfos" /></p>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12" data-bind="foreach: filtered_groups">
             <h2>
+                <span data-bind="visible: is_info" class="label label-info">info</span>
+                <span data-bind="visible: !is_info" class="label label-danger">fatal</span>
                 <a data-bind="attr: { href: url }">Group of <span data-bind="text: event_count"></span> events</a>
             </h2>
 
@@ -43,6 +49,7 @@
         var self = this;
         self.id = data.id;
         self.url = data.url;
+        self.is_info = data.is_info;
         self.message = data.message;
         self.stacktrace = data.stacktrace;
         self.label = ko.computed(function() {
@@ -59,11 +66,13 @@
         self.active_event_index = ko.observable(0);
         self.active_event = ko.computed(function() {
             return self.events[self.active_event_index()];
-        })
+        });
+        self.is_info = self.events[0].is_info;
     }
 
     function VM(groups) {
         var self = this;
+        self.excludeInfos = ko.observable(true);
         self.groups = ko.observableArray(
             $.map(groups, function(g) { return new Group(g) })
         );
@@ -71,6 +80,15 @@
             return self.groups.sorted(function (left, right) {
                 return left.event_count < right.event_count;
             })
+        });
+        self.filtered_groups = ko.computed(function() {
+            return ko.utils.arrayFilter(self.sorted_groups(), function(group) {
+                if (self.excludeInfos()) {
+                    return !group.is_info;
+                } else {
+                    return group.is_info;
+                }
+            });
         });
         self.previousEvent = function(group) {
             if (group.active_event_index() > 0) {
@@ -89,7 +107,7 @@
             { id: '{{ group.group_id }}', event_count: {{ group.event_count }}, url: 'https://sentry.prod.mozaws.net/operations/firefox-nightly/issues/{{ group.group_id }}', events:
                 [
                 {% for event in group.event_set.all %}
-                    { id: '{{ event.id }}', url: 'https://sentry.prod.mozaws.net/operations/firefox-nightly/issues/{{ group.group_id }}/events/{{ event.sentry_id }}/', message: '{{ event.message|escapejs }}', stacktrace: '{{ event.stacktrace_set.all.0.stacktrace|escapejs }}'},
+                    { id: '{{ event.id }}', is_info: {{ event.is_info|yesno:"true,false" }}, url: 'https://sentry.prod.mozaws.net/operations/firefox-nightly/issues/{{ group.group_id }}/events/{{ event.sentry_id }}/', message: '{{ event.message|escapejs }}', stacktrace: '{{ event.stacktrace_set.all.0.stacktrace|escapejs }}'},
                 {% endfor %}
                 ]
             },

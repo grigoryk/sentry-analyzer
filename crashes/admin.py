@@ -7,7 +7,7 @@ class StacktraceInline(admin.TabularInline):
     model = Stacktrace
 
 class EventAdmin(admin.ModelAdmin):
-    list_display = ('group_id', 'sentry_id', 'message')
+    list_display = ('group_id', 'sentry_id', 'message', 'is_info')
     search_fields = ['tags__value', 'sentry_id', 'event_id', 'group__group_id', 'message']
     date_hierarchy = 'event_created'
 
