@@ -27,7 +27,7 @@
                 </tr>
             </thead>
             <tbody data-bind="foreach: sortedPackages">
-                <tr>
+                <tr data-bind="click: highlightPackage, css: { 'info' : highlightedPackage() == name }">
                     <td><a data-bind="text: name, attr: { href: url }"></a></td>
                     <td data-bind="text: info_count"></td>
                     <td>
@@ -98,7 +98,10 @@
             var self = this;
 
             self.timeRange = ko.observable(7);
+            // well, that's a hack :/ not sure how else to access this from Pacakge.
             globalTimeRange = self.timeRange;
+
+            self.highlightedPackage = ko.observable();
 
             // package, info, fatal, infoTrend, fatalTrend
             self.sortBy = ko.observable("fatalTrend");
@@ -112,6 +115,15 @@
             self.packages = ko.observableArray(
                 $.map(packages, function(p) { return new Package(p) })
             );
+
+            self.highlightPackage = (package) => {
+                if (self.highlightedPackage() == package.name) {
+                    self.highlightedPackage(null);
+                } else {
+                    self.highlightedPackage(package.name);
+                }
+                return true;
+            };
 
             self.filteredPackages = ko.computed(function() {
                 if (!self.search()) {
