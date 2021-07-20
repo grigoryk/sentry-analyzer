@@ -31,14 +31,14 @@
                     <td><a data-bind="text: name, attr: { href: url }"></a></td>
                     <td data-bind="text: info_count"></td>
                     <td>
-                        <span class="label" data-bind="css: {'label-warning': info_trend() > 0, 'label-success': info_trend() < 0, 'label-default': info_trend() == 0 }">
+                        <span class="label" data-bind="attr: { title: info_raw }, css: {'label-warning': info_trend() > 0, 'label-success': info_trend() < 0, 'label-default': info_trend() == 0 }">
                             <span class="glyphicon" data-bind="css: {'glyphicon-arrow-up': info_trend() > 0, 'glyphicon-arrow-down': info_trend() < 0, 'glyphicon-option-horizontal': info_trend() == 0}"></span>
                             <span data-bind="text: info_trend, visible: info_trend() != 0"></span>
                         </span>
                     </td>
                     <td data-bind="text: fatal_count"></td>
                     <td>
-                        <span class="label" data-bind="css: {'label-warning': fatal_trend() > 0, 'label-success': fatal_trend() < 0, 'label-default': fatal_trend() == 0 }">
+                        <span class="label" data-bind="attr: { title: fatal_raw }, css: {'label-warning': fatal_trend() > 0, 'label-success': fatal_trend() < 0, 'label-default': fatal_trend() == 0 }">
                             <span class="glyphicon" data-bind="css: {'glyphicon-arrow-up': fatal_trend() > 0, 'glyphicon-arrow-down': fatal_trend() < 0, 'glyphicon-option-horizontal': fatal_trend() == 0}"></span>
                             <span data-bind="text: fatal_trend, visible: fatal_trend() != 0"></span>
                         </span>
@@ -73,22 +73,45 @@
                 return self.limitedDates().reduce((sum, val) => sum + val.fatal, 0);
             });
             self.info_trend = ko.computed(function() {
-                return trend('info');
+                return trendOLS('info');
             });
             self.fatal_trend = ko.computed(function() {
-                return trend('fatal');
+                return trendOLS('fatal');
             });
 
-            function trend(key) {
+            self.info_raw = ko.computed(() => {
+                var raw = rawValues(self.limitedDates(), 'info');
+                return raw.slice(0, raw.length - 1);
+            });
+
+            self.fatal_raw = ko.computed(() => {
+                var raw = rawValues(self.limitedDates(), 'fatal');
+                return raw.slice(0, raw.length - 1);
+            });
+
+            function rawValues(dates, key) {
+                var dx = Array.from(dates).reverse();
+                return $.map(dx, (d) => d[key]);
+            }
+
+            function trendOLS(key) {
                 var dates = self.limitedDates();
+                var xset = [...Array(dates.length + 1).keys()].slice(1);
+                var yset = rawValues(dates, key);
+
+                // exclude last day (it's usually incomplete).
+                var xset_sliced = xset.slice(0, xset.length - 1);
+                var yset_sliced = yset.slice(0, yset.length - 1);
+                var ols = findLineByLeastSquares(xset_sliced, yset_sliced);
                 var diffs = [];
-                dates.forEach((current, i) => {
-                    if (i == (dates.length - 1)) {
+                ols[1].forEach((current, i) => {
+                    // -2 to exclude last day
+                    if (i == (dates.length - 2)) {
                         return;
                     }
 
-                    var next = dates[i + 1];
-                    diffs.push(next[key] - current[key]);
+                    var next = ols[1][i + 1];
+                    diffs.push(next - current);
                 });
                 return Math.round(1000 * diffs.reduce((sum, v) => sum + v, 0) / diffs.length) / 1000;
             }
@@ -213,5 +236,67 @@
                 {% endfor %}
             ]
         ));
+
+        // from https://medium.com/@sahirnambiar/linear-least-squares-a-javascript-implementation-and-a-definitional-question-e3fba55a6d4b
+        function findLineByLeastSquares(values_x, values_y) {
+            var x_sum = 0;
+            var y_sum = 0;
+            var xy_sum = 0;
+            var xx_sum = 0;
+            var count = 0;
+
+            /*
+            * The above is just for quick access, makes the program faster
+            */
+            var x = 0;
+            var y = 0;
+            var values_length = values_x.length;
+
+            if (values_length != values_y.length) {
+                throw new Error('The parameters values_x and values_y need to have same size!');
+            }
+
+            /*
+            * Above and below cover edge cases
+            */
+            if (values_length === 0) {
+                return [ [], [] ];
+            }
+
+            /*
+            * Calculate the sum for each of the parts necessary.
+            */
+            for (let i = 0; i< values_length; i++) {
+                x = values_x[i];
+                y = values_y[i];
+                x_sum+= x;
+                y_sum+= y;
+                xx_sum += x*x;
+                xy_sum += x*y;
+                count++;
+            }
+
+            /*
+            * Calculate m and b for the line equation:
+            * y = x * m + b
+            */
+            var m = (count*xy_sum - x_sum*y_sum) / (count*xx_sum - x_sum*x_sum);
+            var b = (y_sum/count) - (m*x_sum)/count;
+
+            /*
+            * We then return the x and y data points according to our fit
+            */
+            var result_values_x = [];
+            var result_values_y = [];
+
+            for (let i = 0; i < values_length; i++) {
+                x = values_x[i];
+                y = x * m + b;
+                result_values_x.push(x);
+                result_values_y.push(y);
+            }
+
+            return [result_values_x, result_values_y];
+        }
     </script>
 {% endblock %}
