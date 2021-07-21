@@ -23,7 +23,7 @@ def assign_package_categories_event(event_id):
     for s in event.stacktrace_set.all():
         mozilla_set = set()
         for line in s.stacktrace.split():
-            if line.startswith("mozilla"):
+            if line.startswith("mozilla") or line.startswith("org.mozilla"):
                 parts = line.split(".")
                 package = ".".join((p for p in parts if not p[0].isupper() and p[0].isalpha()))
                 mozilla_set.add(package)
