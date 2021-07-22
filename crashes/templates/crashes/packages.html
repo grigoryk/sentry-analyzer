@@ -5,14 +5,17 @@
 {% block content %}
     <div class="jumbotron">
         <div class="row">
-            <div class="col-md-8"><h1>Package browser</h1></div>
+            <div class="col-md-8"><h2>Package explorer</h2></div>
+            <div class="col-md-12">
+                <p>Raw data status: {{ stacktraces_processed }} / {{ stacktraces_all }} {{ processed_progress }}%</p>
+            </div>
 
             <div class="col-md-4" style="padding-top: 20px">
                 <div class="form-inline">
                     <label class="sr-only" for="packageSearch">Package Search</label>
                     <input data-bind="textInput: search" type="text" class="form-control" id="packageSearch" placeholder="Package Search">
                     <label for="timeRange">Past <span data-bind="text: timeRange"></span> <span data-bind="text: timeRange() == 1 ? 'day' : 'days'"></span></label>
-                    <input id="timeRange" type="range" min="1" max="30" data-bind="value: timeRange, valueUpdate: 'input'">
+                    <input id="timeRange" type="range" min="1" max="90" data-bind="value: timeRange, valueUpdate: 'input'">
                 </div>
             </div>
         </div>
@@ -53,17 +56,7 @@
     <script type="text/javascript">
         var globalTimeRange;
         var globalOlsCache = {};
-        const cyrb53 = function(str, seed = 0) {
-            let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
-            for (let i = 0, ch; i < str.length; i++) {
-                ch = str.charCodeAt(i);
-                h1 = Math.imul(h1 ^ ch, 2654435761);
-                h2 = Math.imul(h2 ^ ch, 1597334677);
-            }
-            h1 = Math.imul(h1 ^ (h1>>>16), 2246822507) ^ Math.imul(h2 ^ (h2>>>13), 3266489909);
-            h2 = Math.imul(h2 ^ (h2>>>16), 2246822507) ^ Math.imul(h1 ^ (h1>>>13), 3266489909);
-            return 4294967296 * (2097151 & h2) + (h1>>>0);
-        };
+
         function Package(package) {
             var self = this;
             self.name = package.name;
@@ -280,67 +273,5 @@
                 {% endfor %}
             ]
         ));
-
-        // from https://medium.com/@sahirnambiar/linear-least-squares-a-javascript-implementation-and-a-definitional-question-e3fba55a6d4b
-        function findLineByLeastSquares(values_x, values_y) {
-            var x_sum = 0;
-            var y_sum = 0;
-            var xy_sum = 0;
-            var xx_sum = 0;
-            var count = 0;
-
-            /*
-            * The above is just for quick access, makes the program faster
-            */
-            var x = 0;
-            var y = 0;
-            var values_length = values_x.length;
-
-            if (values_length != values_y.length) {
-                throw new Error('The parameters values_x and values_y need to have same size!');
-            }
-
-            /*
-            * Above and below cover edge cases
-            */
-            if (values_length === 0) {
-                return [ [], [] ];
-            }
-
-            /*
-            * Calculate the sum for each of the parts necessary.
-            */
-            for (let i = 0; i< values_length; i++) {
-                x = values_x[i];
-                y = values_y[i];
-                x_sum+= x;
-                y_sum+= y;
-                xx_sum += x*x;
-                xy_sum += x*y;
-                count++;
-            }
-
-            /*
-            * Calculate m and b for the line equation:
-            * y = x * m + b
-            */
-            var m = (count*xy_sum - x_sum*y_sum) / (count*xx_sum - x_sum*x_sum);
-            var b = (y_sum/count) - (m*x_sum)/count;
-
-            /*
-            * We then return the x and y data points according to our fit
-            */
-            var result_values_x = [];
-            var result_values_y = [];
-
-            for (let i = 0; i < values_length; i++) {
-                x = values_x[i];
-                y = x * m + b;
-                result_values_x.push(x);
-                result_values_y.push(y);
-            }
-
-            return [result_values_x, result_values_y];
-        }
     </script>
 {% endblock %}

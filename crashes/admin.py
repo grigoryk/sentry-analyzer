@@ -43,4 +43,9 @@ class AssignedCategoryAdmin(admin.ModelAdmin):
 
 admin.site.register(AssignedCategory, AssignedCategoryAdmin)
 
-admin.site.register(Stacktrace)
+class StacktraceAdmin(admin.ModelAdmin):
+    list_display = ('event', 'processed',)
+    list_filter = ('processed',)
+
+admin.site.register(Stacktrace, StacktraceAdmin)
+admin.site.register(EventGroup)

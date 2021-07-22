@@ -103,6 +103,7 @@ class AssignedCategory(models.Model):
 class Stacktrace(models.Model):
     event = models.ForeignKey(Event, on_delete=models.CASCADE)
     stacktrace = models.TextField()
+    processed = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Stacktrace for {self.event.message}"

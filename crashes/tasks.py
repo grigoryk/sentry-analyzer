@@ -1,10 +1,11 @@
 from celery import shared_task
 from .models import AssignedCategory, Category, Event, EventGroup, EventTag, EventTagKeyed, Stacktrace
 
-from django.db import transaction, IntegrityError
-from django.core.exceptions import MultipleObjectsReturned
+from django.db import IntegrityError
+from django.core.cache import cache
 
 import requests
+import datetime
 
 ENDPOINT = "https://sentry.prod.mozaws.net/api/0"
 EVENTS_ENDPOINT = ENDPOINT + "/projects/operations/fenix/events/"
@@ -13,30 +14,56 @@ HEADERS = {"Authorization": "Bearer " + TOKEN}
 
 # Local processing:
 @shared_task
-def assign_package_categories():
-    for e in Event.objects.all():
-        assign_package_categories_event.delay(e.id)
+def process_categories():
+    for p in Category.objects.all():
+        process_category.delay(p.id)
 
 @shared_task
-def assign_package_categories_event(event_id):
-    event = Event.objects.get(id=event_id)
-    for s in event.stacktrace_set.all():
-        mozilla_set = set()
-        for line in s.stacktrace.split():
-            if line.startswith("mozilla") or line.startswith("org.mozilla"):
-                parts = line.split(".")
-                package = ".".join((p for p in parts if not p[0].isupper() and p[0].isalpha()))
-                mozilla_set.add(package)
-        for package in mozilla_set:
-            try:
-                cat = Category(name = package)
-                cat.save()
-            except IntegrityError:
-                cat = Category.objects.filter(name = package).first()
+def process_category(category_id):
+    today = datetime.datetime.today()
+    cutoff_date = today - datetime.timedelta(days=89)
+    date_list = [(today - datetime.timedelta(days=x)).date() for x in range(90)]
 
-            if AssignedCategory.objects.filter(group = event.group, category = cat).count() == 0:
-                AssignedCategory(group = event.group, category = cat).save()
+    category = Category.objects.get(id=category_id)
+    package = {
+        "name": category.name,
+        "dates": {d.isoformat(): {'info': 0, 'fatal': 0} for d in date_list}
+    }
+    for group in category.eventgroup_set.all():
+        for event in group.event_set.filter(event_created__gte=cutoff_date):
+            if event.is_info():
+                package['dates'][event.event_created.date().isoformat()]['info'] += 1
+            else:
+                package['dates'][event.event_created.date().isoformat()]['fatal'] += 1
+    cache.set('computed_package_category_id_%s' % category_id, package, 60 * 60 * 3)
 
+@shared_task
+def process_stacktraces():
+    for s in Stacktrace.objects.filter(processed=False):
+        process_stacktrace.delay(s.id)
+
+@shared_task
+def process_stacktrace(stacktrace_id):
+    s = Stacktrace.objects.get(id=stacktrace_id)
+    mozilla_set = set()
+    for line in s.stacktrace.split():
+        if line.startswith("mozilla") or line.startswith("org.mozilla"):
+            parts = line.split(".")
+            package = ".".join((p for p in parts if not p[0].isupper() and p[0].isalpha()))
+            mozilla_set.add(package)
+            break
+    for package in mozilla_set:
+        try:
+            cat = Category(name = package)
+            cat.save()
+        except IntegrityError:
+            cat = Category.objects.filter(name = package).first()
+
+        if AssignedCategory.objects.filter(group = s.event.group, category = cat).count() == 0:
+            AssignedCategory(group = s.event.group, category = cat).save()
+
+    s.processed = True
+    s.save()
 
 # Sentry integration:
 @shared_task
@@ -89,10 +116,11 @@ def process_endpoint(fetched_json):
                         frames = val["stacktrace"]["frames"]
                         stacktrace, _ = Stacktrace.objects.get_or_create(
                             event=event,
-                            stacktrace=process_stacktrace(frames)
+                            stacktrace=format_stacktrace(frames)
                         )
+                        process_stacktrace.delay(stacktrace.id)
                     except Exception:
                         pass
 
-def process_stacktrace(frames):
+def format_stacktrace(frames):
     return "\n".join([f"{f['module']}#{f['function']}@{f['lineNo']}" for f in reversed(frames)])

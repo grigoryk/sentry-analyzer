@@ -2,42 +2,90 @@
 
 {% block title %}Sentry analyzer: package {{ package.name}}{% endblock %}
 
+{% block css %}
+    <style>
+        div.chart {
+            border-bottom: solid 1px rgb(106, 106, 106);
+        }
+
+        div.bar {
+            width: 5px;
+            display: inline-block;
+            background-color: #686666;
+        }
+
+        .highlight {
+            background-color: rgb(38, 38, 38);
+            color: rgb(235, 235, 235);
+        }
+    </style>
+{% endblock %}
+
 {% block content %}
 <div class="jumbotron">
     <div class="row">
         <div class="col-md-12">
-            <h1><a href="{% url 'packages' %}">&larr;</a>{{ package.name }}</h1>
+            <h2><a href="{% url 'packages' %}">&larr;</a>{{ package.name }}</h2>
         </div>
     </div>
 
     <div class="row">
-        <p>Exclude infos: <input type="checkbox" data-bind="checked: excludeInfos" /></p>
+        <div class="col-md-4">
+            <div class="form-inline">
+                <input data-bind="textInput: search" type="text" class="form-control" id="packageSearch" placeholder="Search stacktrace, etc...">
+                <label for="timeRange">Past <span data-bind="text: timeRange"></span> <span data-bind="text: timeRange() == 1 ? 'day' : 'days'"></span></label>
+                <input id="timeRange" type="range" min="1" max="90" data-bind="value: timeRange, valueUpdate: 'input'">
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4">
+            <p>Event filter: <select data-bind="options: ['info', 'fatal'], value: eventFilter"></select></p>
+            <p>Sort by: <select data-bind="options: ['trend', 'total'], value: sortBy"></select><select data-bind="options: ['desc', 'asc'], value: sortDirection"></select></p>
+            <div class="checkbox" data-bind="if: oom_count() > 0">
+                <label>
+                    <input type="checkbox" id="includeOOM" data-bind="checked: includeOOM"> Include OOM (<span data-bind="text: oom_count"></span>)
+                </label>
+            </div>
+        </div>
     </div>
 
     <div class="row">
         <div class="col-md-12" data-bind="foreach: filtered_groups">
-            <h2>
-                <span data-bind="visible: is_info" class="label label-info">info</span>
-                <span data-bind="visible: !is_info" class="label label-danger">fatal</span>
-                <a data-bind="attr: { href: url }">Group of <span data-bind="text: event_count"></span> events</a>
-            </h2>
+            <div data-bind="if: (is_info ? info_count() : fatal_count()) > 0">
+                <h2>
+                    <span class="label" data-bind="css: {'label-warning': trend() > 0, 'label-success': trend() < 0, 'label-default': trend() == 0 }">
+                        <span class="glyphicon" data-bind="css: {'glyphicon-arrow-up': trend() > 0, 'glyphicon-arrow-down': trend() < 0, 'glyphicon-option-horizontal': trend() == 0}"></span>
+                        <span data-bind="text: trend, visible: trend() != 0"></span>
+                    </span>
+                    <span data-bind="text: is_info ? 'info' : 'fatal', css: {'label-info' : is_info, 'label-danger': !is_info}" class="label"></span>
+                    <a data-bind="attr: { href: url }">Group of <span data-bind="text: is_info ? info_count() : fatal_count()"></span> events</a>
+                </h2>
 
-            <div data-bind="using: active_event">
-                <a data-bind="attr: { href: url }">
-                    <strong data-bind="text: message"></strong>
-                </a>
-                <div>
-                    <code data-bind="text: stacktrace"></code>
+                <div class="chart" data-bind="style: { width: raw().length * 5 * 2 }, foreach: normalized_raw">
+                    <div class="bar" data-bind="style: { height: $data }"></div>
                 </div>
-            </div>
 
-            <nav>
-                <ul class="pager">
-                    <li><a data-bind="visible: active_event_index() > 0, click: previousEvent" href="#">Previous</a></li>
-                    <li><span data-bind="text: active_event_index() + 1"></span></li>
-                    <li><a data-bind="visible: active_event_index() < (event_count - 1), click: nextEvent" href="#">Next</a></li>
-                </ul>
-            </nav>
+                <!-- ko if: active_event -->
+                <div data-bind="using: active_event">
+                    <a data-bind="attr: { href: url }">
+                        <strong data-bind="text: message"></strong>
+                    </a>
+                    <div>
+                        <code data-bind="highlightedText: { text: stacktrace, highlight: search, css: 'highlight' }"></code>
+                    </div>
+                </div>
+
+                <nav>
+                    <ul class="pager">
+                        <li><a data-bind="visible: active_event_index() > 0, click: previousEvent" href="#">&larr;</a></li>
+                        <li><span data-bind="text: 'Stacktrace #' + (active_event_index() + 1)"></span></li>
+                        <li><a data-bind="visible: active_event_index() < (event_count - 1), click: nextEvent" href="#">&rarr;</a></li>
+                    </ul>
+                </nav>
+                <!-- /ko -->
+            </div>
         </div>
     </div>
 </div>
@@ -45,6 +93,24 @@
 
 {% block scripts %}
 <script type="text/javascript">
+    var globalTimeRange;
+    var globalOlsCache = {};
+
+    // from http://www.knockmeout.net/2011/06/fun-with-highlighting-in-knockoutjs.html
+    ko.bindingHandlers.highlightedText = {
+        update: function(element, valueAccessor) {
+            var options = valueAccessor();
+            var value = ko.utils.unwrapObservable(options.text);
+            var search = ko.utils.unwrapObservable(options.highlight);
+            var css = ko.utils.unwrapObservable(options.css);
+            if (options.sanitize) {
+                value = $('<div/>').text(value).html(); //could do this or something similar to escape HTML before replacement, if there is a risk of HTML injection in this value
+            }
+            var replacement = '<span class="' + css + '">' + search + '</span>';
+            element.innerHTML = value.replace(new RegExp(search, 'g'), replacement);
+        }
+    };
+
     function Event(data) {
         var self = this;
         self.id = data.id;
@@ -61,33 +127,150 @@
         var self = this;
         self.id = data.id;
         self.url = data.url;
+        self.dates = ko.observableArray(data.dates);
+        self.limitedDates = ko.computed(() => {
+            var now = Date.now();
+            return ko.utils.arrayFilter(self.dates(), (date) => {
+                var d = Date.parse(date.date);
+                var delta = Math.floor((now - d) / (1000 * 60 * 60 * 24));
+                var timeRangeLimit = globalTimeRange();
+                return delta <= timeRangeLimit;
+            });
+        });
+        self.info_count = ko.computed(function() {
+            var dates = self.limitedDates();
+            return self.limitedDates().reduce((sum, val) => sum + val.info, 0);
+        });
+        self.fatal_count = ko.computed(function() {
+            var dates = self.limitedDates();
+            return self.limitedDates().reduce((sum, val) => sum + val.fatal, 0);
+        });
+
         self.event_count = data.event_count;
         self.events = $.map(data.events, function(e) { return new Event(e) });
         self.active_event_index = ko.observable(0);
         self.active_event = ko.computed(function() {
             return self.events[self.active_event_index()];
         });
-        self.is_info = self.events[0].is_info;
+        if (self.events.length > 0) {
+            self.is_info = self.events[0].is_info;
+            self.is_oom = self.events[0].message.startsWith('OutOfMemoryError') || self.events[0].message.startsWith('Failed to allocate');
+            self.search_target = self.events[0].message + self.events[0].stacktrace;
+        } else {
+            self.is_info = false;
+            self.is_oom = false;
+            self.search_target = "";
+        }
+        self.trend = ko.computed(function() {
+            if (globalTimeRange() == 1) {
+                return 0;
+            } else {
+                return trendOLS(self.limitedDates(), self.is_info ? 'info' : 'fatal');
+            }
+        });
+        self.raw = ko.computed(() => {
+            var raw = rawValues(self.limitedDates(), self.is_info ? 'info' : 'fatal');
+            return raw.slice(0, raw.length - 1);
+        });
+        self.normalized_raw = ko.computed(() => {
+            var raw = self.raw();
+            var max = Math.max(...raw);
+            return $.map(raw, (r) => 50 * r / max);
+        });
+        function rawValues(dates, key) {
+            var dx = Array.from(dates).reverse();
+            return $.map(dx, (d) => d[key]);
+        }
+        function trendOLS(dates, key) {
+            var dates_hash = key + cyrb53(JSON.stringify(dates));
+            if (globalOlsCache.hasOwnProperty(dates_hash)) {
+                return globalOlsCache[dates_hash];
+            }
+
+            var xset = [...Array(dates.length + 1).keys()].slice(1);
+            var yset = rawValues(dates, key);
+
+            // exclude last day (it's usually incomplete).
+            var xset_sliced = xset.slice(0, xset.length - 1);
+            var yset_sliced = yset.slice(0, yset.length - 1);
+            var ols = findLineByLeastSquares(xset_sliced, yset_sliced);
+            var diffs = [];
+            ols[1].forEach((current, i) => {
+                // -2 to exclude last day
+                if (i == (dates.length - 2)) {
+                    return;
+                }
+
+                var next = ols[1][i + 1];
+                diffs.push(next - current);
+            });
+            var res = Math.round(1000 * diffs.reduce((sum, v) => sum + v, 0) / diffs.length) / 1000;
+            globalOlsCache[dates_hash] = res;
+            return res;
+        }
     }
 
     function VM(groups) {
         var self = this;
-        self.excludeInfos = ko.observable(true);
+        self.eventFilter = ko.observable('fatal');
+        self.sortBy = ko.observable('trend');
+        self.sortDirection = ko.observable('desc');
+        self.includeOOM = ko.observable(false);
+
+        self.timeRange = ko.observable(7);
+        // well, that's a hack :/ not sure how else to access this from Pacakge.
+        globalTimeRange = self.timeRange;
+        self.search = ko.observable("");
+
         self.groups = ko.observableArray(
             $.map(groups, function(g) { return new Group(g) })
         );
+
+        self.oom_count = ko.computed(() => {
+            return self.groups().reduce((sum, val) => {
+                if (val.is_oom) {
+                    return sum + 1;
+                } else {
+                    return sum;
+                }
+            }, 0);
+        });
+
+        function compare(left, right, direction) {
+            if (direction == 'desc') {
+                return left < right;
+            } else {
+                return left > right;
+            }
+        }
         self.sorted_groups = ko.computed(function() {
             return self.groups.sorted(function (left, right) {
-                return left.event_count < right.event_count;
+                if (self.sortBy() == 'trend') {
+                    return compare(left.trend(), right.trend(), self.sortDirection());
+                } // else 'total'
+
+                if (self.eventFilter() == 'info') {
+                    return compare(left.info_count(), right.info_count(), self.sortDirection());
+                } else {
+                    return compare(left.fatal_count(), right.fatal_count(), self.sortDirection());
+                }
             })
         });
         self.filtered_groups = ko.computed(function() {
             return ko.utils.arrayFilter(self.sorted_groups(), function(group) {
-                if (self.excludeInfos()) {
-                    return !group.is_info;
-                } else {
-                    return true;
+                var include = true;
+                if (!self.includeOOM()) {
+                    include = include && !group.is_oom;
                 }
+                if (self.eventFilter() == 'fatal') {
+                    include = include && !group.is_info;
+                } else {
+                    include = include && group.is_info;
+                }
+                if (self.search()) {
+                    include = include && group.search_target.includes(self.search());
+                }
+                return include;
             });
         });
         self.previousEvent = function(group) {
@@ -103,11 +286,19 @@
     }
     ko.applyBindings(VM(
         [
-            {% for group in package.eventgroup_set.all %}
-            { id: '{{ group.group_id }}', event_count: {{ group.event_count }}, url: 'https://sentry.prod.mozaws.net/operations/firefox-nightly/issues/{{ group.group_id }}', events:
+            {% for group in package.groups %}
+            { id: '{{ group.id }}', event_count: {{ group.event_count }}, url: '{{ group.url }}',
+
+                dates: [
+                {% for date, counts in group.dates.items %}
+                    { date: '{{ date }}', info: {{ counts.info }}, fatal : {{ counts.fatal }} },
+                {% endfor %}
+                ],
+
+                events:
                 [
-                {% for event in group.event_set.all %}
-                    { id: '{{ event.id }}', is_info: {{ event.is_info|yesno:"true,false" }}, url: 'https://sentry.prod.mozaws.net/operations/firefox-nightly/issues/{{ group.group_id }}/events/{{ event.sentry_id }}/', message: '{{ event.message|escapejs }}', stacktrace: '{{ event.stacktrace_set.all.0.stacktrace|escapejs }}'},
+                {% for event in group.events %}
+                    { id: '{{ event.id }}', is_info: {{ event.is_info|yesno:"true,false" }}, url: '{{ event.url }}', message: '{{ event.message|escapejs }}', stacktrace: '{{ event.stacktrace|escapejs }}'},
                 {% endfor %}
                 ]
             },
