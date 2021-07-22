@@ -1,54 +1,82 @@
 {% extends "crashes/base.html" %}
+{% load humanize %}
 
 {% block title %}Sentry analyzer: Package browser{% endblock %}
 
+{% block css %}
+<style>
+.data-status label {
+    font-weight: 400;
+}
+</style>
+{% endblock %}
+
 {% block content %}
     <div class="jumbotron">
-        <div class="row">
-            <div class="col-md-8"><h2>Package explorer</h2></div>
-            <div class="col-md-12">
-                <p>Raw data status: {{ stacktraces_processed }} / {{ stacktraces_all }} {{ processed_progress }}%</p>
-            </div>
-
-            <div class="col-md-4" style="padding-top: 20px">
-                <div class="form-inline">
-                    <label class="sr-only" for="packageSearch">Package Search</label>
-                    <input data-bind="textInput: search" type="text" class="form-control" id="packageSearch" placeholder="Package Search">
-                    <label for="timeRange">Past <span data-bind="text: timeRange"></span> <span data-bind="text: timeRange() == 1 ? 'day' : 'days'"></span></label>
-                    <input id="timeRange" type="range" min="1" max="90" data-bind="value: timeRange, valueUpdate: 'input'">
+        <div class="row data-status" style="padding-top: 20px">
+            <div class="col-md-4">
+                <div class="panel panel-default">
+                    <div class="panel-heading">Data status</div>
+                    <div class="panel-body">
+                        <label>Latest event: {{ latest_event.event_created }} {{ latest_event.event_created|date:'e' }}</label>
+                        <label>Oldest event: {{ oldest_event.event_created }} {{ oldest_event.event_created|date:'e' }}</label>
+                        <label>Stacktraces processed: {{ stacktraces_processed|intcomma }} of {{ stacktraces_all|intcomma }}</label>
+                        <div class="progress">
+                            <div class="progress-bar progress-bar-success" role="progressbar" aria-valuenow="{{ processed_progress }}" aria-valuemin="0" aria-valuemax="100" style="width: {{ processed_progress }}%;">
+                            {{ processed_progress|floatformat:2 }}%
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-        <table class="table table-hover">
-            <thead>
-                <tr>
-                    <th data-bind="click: sortByPackage">Package ID <span class="glyphicon" data-bind="visible: sortBy() == 'package', css: {'glyphicon-arrow-up': !packageSortDesc(), 'glyphicon-arrow-down': packageSortDesc() }"></span></th>
-                    <th data-bind="click: sortByInfo">Infos <span class="glyphicon" data-bind="visible: sortBy() == 'info', css: {'glyphicon-arrow-up': !infoSortDesc(), 'glyphicon-arrow-down': infoSortDesc() }"></span></th>
-                    <th data-bind="click: sortByInfoTrend">Info trend <span class="glyphicon" data-bind="visible: sortBy() == 'infoTrend', css: {'glyphicon-arrow-up': !infoTrendSortDesc(), 'glyphicon-arrow-down': infoTrendSortDesc() }"></span></th>
-                    <th data-bind="click: sortByFatal">Fatals <span class="glyphicon" data-bind="visible: sortBy() == 'fatal', css: {'glyphicon-arrow-up': !fatalSortDesc(), 'glyphicon-arrow-down': fatalSortDesc() }"></span></th>
-                    <th data-bind="click: sortByFatalTrend">Fatal trend <span class="glyphicon" data-bind="visible: sortBy() == 'fatalTrend', css: {'glyphicon-arrow-up': !fatalTrendSortDesc(), 'glyphicon-arrow-down': fatalTrendSortDesc() }"></span></th>
-                </tr>
-            </thead>
-            <tbody data-bind="foreach: sortedPackages">
-                <tr data-bind="click: highlightPackage, css: { 'info' : highlightedPackage() == name }">
-                    <td><a data-bind="text: name, attr: { href: url }"></a></td>
-                    <td data-bind="text: info_count"></td>
-                    <td>
-                        <span class="label" data-bind="attr: { title: info_raw }, css: {'label-warning': info_trend() > 0, 'label-success': info_trend() < 0, 'label-default': info_trend() == 0 }">
-                            <span class="glyphicon" data-bind="css: {'glyphicon-arrow-up': info_trend() > 0, 'glyphicon-arrow-down': info_trend() < 0, 'glyphicon-option-horizontal': info_trend() == 0}"></span>
-                            <span data-bind="text: info_trend, visible: info_trend() != 0"></span>
-                        </span>
-                    </td>
-                    <td data-bind="text: fatal_count"></td>
-                    <td>
-                        <span class="label" data-bind="attr: { title: fatal_raw }, css: {'label-warning': fatal_trend() > 0, 'label-success': fatal_trend() < 0, 'label-default': fatal_trend() == 0 }">
-                            <span class="glyphicon" data-bind="css: {'glyphicon-arrow-up': fatal_trend() > 0, 'glyphicon-arrow-down': fatal_trend() < 0, 'glyphicon-option-horizontal': fatal_trend() == 0}"></span>
-                            <span data-bind="text: fatal_trend, visible: fatal_trend() != 0"></span>
-                        </span>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
+        <div class="row">
+            <div class="col-md-8"><h2>Package explorer</h2></div>
+            <div class="col-md-offset-2 col-md-2"><div class="form-inline">
+                <label class="sr-only" for="packageSearch">Package Search</label>
+                <input data-bind="textInput: search" type="text" class="form-control" id="packageSearch" placeholder="Package Search">
+            </div></div>
+        </div>
+        <div class="row">
+            <div class="col-md-4" style="padding-top: 20px">
+                <label for="timeRange">Past <span data-bind="text: timeRange"></span> <span data-bind="text: timeRange() == 1 ? 'day' : 'days'"></span></label>
+                <input id="timeRange" type="range" min="1" max="90" data-bind="value: timeRange, valueUpdate: 'input'">
+            </div>
+        </div>
+        <div class="row" style="padding-top: 20px;">
+            <div class="col-md-12">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th data-bind="click: sortByPackage">Package ID <span class="glyphicon" data-bind="visible: sortBy() == 'package', css: {'glyphicon-arrow-up': !packageSortDesc(), 'glyphicon-arrow-down': packageSortDesc() }"></span></th>
+                            <th data-bind="click: sortByInfo">Infos <span class="glyphicon" data-bind="visible: sortBy() == 'info', css: {'glyphicon-arrow-up': !infoSortDesc(), 'glyphicon-arrow-down': infoSortDesc() }"></span></th>
+                            <th data-bind="click: sortByInfoTrend">Info trend <span class="glyphicon" data-bind="visible: sortBy() == 'infoTrend', css: {'glyphicon-arrow-up': !infoTrendSortDesc(), 'glyphicon-arrow-down': infoTrendSortDesc() }"></span></th>
+                            <th data-bind="click: sortByFatal">Fatals <span class="glyphicon" data-bind="visible: sortBy() == 'fatal', css: {'glyphicon-arrow-up': !fatalSortDesc(), 'glyphicon-arrow-down': fatalSortDesc() }"></span></th>
+                            <th data-bind="click: sortByFatalTrend">Fatal trend <span class="glyphicon" data-bind="visible: sortBy() == 'fatalTrend', css: {'glyphicon-arrow-up': !fatalTrendSortDesc(), 'glyphicon-arrow-down': fatalTrendSortDesc() }"></span></th>
+                        </tr>
+                    </thead>
+                    <tbody data-bind="foreach: sortedPackages">
+                        <tr data-bind="click: highlightPackage, css: { 'info' : highlightedPackage() == name }">
+                            <td><a data-bind="text: name, attr: { href: url }"></a></td>
+                            <td data-bind="text: info_count"></td>
+                            <td>
+                                <span class="label" data-bind="attr: { title: info_raw }, css: {'label-warning': info_trend() > 0, 'label-success': info_trend() < 0, 'label-default': info_trend() == 0 }">
+                                    <span class="glyphicon" data-bind="css: {'glyphicon-arrow-up': info_trend() > 0, 'glyphicon-arrow-down': info_trend() < 0, 'glyphicon-option-horizontal': info_trend() == 0}"></span>
+                                    <span data-bind="text: info_trend, visible: info_trend() != 0"></span>
+                                </span>
+                            </td>
+                            <td data-bind="text: fatal_count"></td>
+                            <td>
+                                <span class="label" data-bind="attr: { title: fatal_raw }, css: {'label-warning': fatal_trend() > 0, 'label-success': fatal_trend() < 0, 'label-default': fatal_trend() == 0 }">
+                                    <span class="glyphicon" data-bind="css: {'glyphicon-arrow-up': fatal_trend() > 0, 'glyphicon-arrow-down': fatal_trend() < 0, 'glyphicon-option-horizontal': fatal_trend() == 0}"></span>
+                                    <span data-bind="text: fatal_trend, visible: fatal_trend() != 0"></span>
+                                </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 {% endblock %}
 

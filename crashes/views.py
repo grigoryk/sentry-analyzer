@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from django.core.cache import cache
-from .models import Category, Stacktrace
+from .models import Category, Stacktrace, Event
 
 import datetime
 from collections import defaultdict
@@ -9,8 +9,10 @@ def packages(request):
     packages = []
     stacktraces_all = Stacktrace.objects.all().count()
     stacktraces_processed = Stacktrace.objects.filter(processed=True).count()
-    stacktraces_not_processed = Stacktrace.objects.filter(processed=False).count()
     processed_progress = (stacktraces_processed / stacktraces_all) * 100
+
+    latest_event = Event.objects.all().order_by('-event_created')[0]
+    oldest_event = Event.objects.all().order_by('event_created')[0]
 
     for p in Category.objects.all():
         package = cache.get('computed_package_category_id_%s' % p.id)
@@ -21,20 +23,12 @@ def packages(request):
         'packages': packages,
         'stacktraces_processed': stacktraces_processed,
         'stacktraces_all': stacktraces_all,
-        'processed_progress': processed_progress
+        'processed_progress': processed_progress,
+        'latest_event': latest_event,
+        'oldest_event': oldest_event
     })
 
 def package(request, package_name):
-# {% for group in package.package.eventgroup_set.all %}
-#             { id: '{{ group.group_id }}', event_count: {{ group.event_count }}, url: 'https://sentry.prod.mozaws.net/operations/firefox-nightly/issues/{{ group.group_id }}', events:
-#                 [
-#                 {% for event in group.event_set.all %}
-#                     { id: '{{ event.id }}', is_info: {{ event.is_info|yesno:"true,false" }}, url: 'https://sentry.prod.mozaws.net/operations/firefox-nightly/issues/{{ group.group_id }}/events/{{ event.sentry_id }}/', message: '{{ event.message|escapejs }}', stacktrace: '{{ event.stacktrace_set.all.0.stacktrace|escapejs }}'},
-#                 {% endfor %}
-#                 ]
-#             },
-#             {% endfor %}
-
     today = datetime.datetime.today()
     cutoff_date = today - datetime.timedelta(days=29)
     date_list = [(today - datetime.timedelta(days=x)).date() for x in range(30)]

@@ -1,4 +1,4 @@
-from celery import shared_task
+from celery import shared_task, chain
 from .models import AssignedCategory, Category, Event, EventGroup, EventTag, EventTagKeyed, Stacktrace
 
 from django.db import IntegrityError
@@ -13,6 +13,20 @@ TOKEN = "716efdd8ce4942eab62e31a18e29e44b0f5efa6e701747d1876b521a0466d2fc"
 HEADERS = {"Authorization": "Bearer " + TOKEN}
 
 # Local processing:
+@shared_task
+def reset_processing():
+    for s in Stacktrace.objects.filter(processed=True):
+        s.processed = False
+        s.save()
+
+    Category.objects.all().delete()
+    AssignedCategory.objects.all().delete()
+
+@shared_task
+def process_all():
+    # linking didn't work!
+    process_stacktraces.apply_async((), link=process_categories.s())
+
 @shared_task
 def process_categories():
     for p in Category.objects.all():
@@ -114,11 +128,12 @@ def process_endpoint(fetched_json):
                 for val in entry["data"]["values"]:
                     try:
                         frames = val["stacktrace"]["frames"]
-                        stacktrace, _ = Stacktrace.objects.get_or_create(
+                        stacktrace, created = Stacktrace.objects.get_or_create(
                             event=event,
                             stacktrace=format_stacktrace(frames)
                         )
-                        process_stacktrace.delay(stacktrace.id)
+                        if created:
+                            process_stacktrace.delay(stacktrace.id)
                     except Exception:
                         pass
 
