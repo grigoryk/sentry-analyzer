@@ -8,6 +8,10 @@
 .data-status label {
     font-weight: 400;
 }
+.highlight {
+    background-color: rgb(38, 38, 38);
+    color: rgb(235, 235, 235);
+}
 </style>
 {% endblock %}
 
@@ -57,7 +61,7 @@
                     </thead>
                     <tbody data-bind="foreach: sortedPackages">
                         <tr data-bind="click: highlightPackage, css: { 'info' : highlightedPackage() == name }">
-                            <td><a data-bind="text: name, attr: { href: url }"></a></td>
+                            <td><a data-bind="highlightedText: { text: name, highlight: search, css: 'highlight' }, attr: { href: url }"></a></td>
                             <td data-bind="text: info_count"></td>
                             <td>
                                 <span class="label" data-bind="attr: { title: info_raw }, css: {'label-warning': info_trend() > 0, 'label-success': info_trend() < 0, 'label-default': info_trend() == 0 }">
@@ -199,7 +203,7 @@
             self.infoTrendSortDesc = ko.observable(true);
             self.fatalTrendSortDesc = ko.observable(true);
 
-            self.search = ko.observable();
+            self.search = ko.observable("");
             self.packages = ko.observableArray(
                 $.map(packages, function(p) { return new Package(p) })
             );

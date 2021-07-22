@@ -68,23 +68,24 @@
                 </div>
 
                 <!-- ko if: active_event -->
+                <div class="row">
+                    <nav class="col-md-4">
+                        <ul class="pager">
+                            <li><a data-bind="visible: active_event_index() > 0, click: previousEvent" href="#">&larr;</a></li>
+                            <li><span data-bind="text: 'Unique stacktrace #' + (active_event_index() + 1) + ':'"></span></li>
+                            <li><a data-bind="visible: active_event_index() < (unique_events.length - 1), click: nextEvent" href="#">&rarr;</a></li>
+                        </ul>
+                    </nav>
+                </div>
                 <div data-bind="using: active_event">
                     <a data-bind="attr: { href: url }">
                         <strong data-bind="text: message"></strong>
                     </a>
-                    <div>
-                        <code data-bind="highlightedText: { text: stacktrace, highlight: search, css: 'highlight' }"></code>
+                    <div class="stacktrace" data-bind="foreach: stacktrace_lines">
+                        <div data-bind="highlightedText: { text: $data, highlight: search, css: 'highlight' }"></div>
                     </div>
                 </div>
-
-                <nav>
-                    <ul class="pager">
-                        <li><a data-bind="visible: active_event_index() > 0, click: previousEvent" href="#">&larr;</a></li>
-                        <li><span data-bind="text: 'Stacktrace #' + (active_event_index() + 1)"></span></li>
-                        <li><a data-bind="visible: active_event_index() < (event_count - 1), click: nextEvent" href="#">&rarr;</a></li>
-                    </ul>
-                </nav>
-                <!-- /ko -->
+            <!-- /ko -->
             </div>
         </div>
     </div>
@@ -96,21 +97,6 @@
     var globalTimeRange;
     var globalOlsCache = {};
 
-    // from http://www.knockmeout.net/2011/06/fun-with-highlighting-in-knockoutjs.html
-    ko.bindingHandlers.highlightedText = {
-        update: function(element, valueAccessor) {
-            var options = valueAccessor();
-            var value = ko.utils.unwrapObservable(options.text);
-            var search = ko.utils.unwrapObservable(options.highlight);
-            var css = ko.utils.unwrapObservable(options.css);
-            if (options.sanitize) {
-                value = $('<div/>').text(value).html(); //could do this or something similar to escape HTML before replacement, if there is a risk of HTML injection in this value
-            }
-            var replacement = '<span class="' + css + '">' + search + '</span>';
-            element.innerHTML = value.replace(new RegExp(search, 'g'), replacement);
-        }
-    };
-
     function Event(data) {
         var self = this;
         self.id = data.id;
@@ -118,6 +104,7 @@
         self.is_info = data.is_info;
         self.message = data.message;
         self.stacktrace = data.stacktrace;
+        self.stacktrace_lines = self.stacktrace.split('\n');
         self.label = ko.computed(function() {
             return "Event #" + self.id;
         })
@@ -148,9 +135,23 @@
 
         self.event_count = data.event_count;
         self.events = $.map(data.events, function(e) { return new Event(e) });
+        self.unique_events = (() => {
+            var stacktrace_set = {};
+            return ko.utils.arrayFilter(self.events, (e) => {
+                var withoutLineNumbers = $.map(e.stacktrace.split('\n'), (l) => {
+                    return l.split('@')[0];
+                });
+                var hash = cyrb53(withoutLineNumbers.join(''));
+                if (stacktrace_set.hasOwnProperty(hash)) {
+                    return false;
+                }
+                stacktrace_set[hash] = true;
+                return true;
+            })
+        })();
         self.active_event_index = ko.observable(0);
         self.active_event = ko.computed(function() {
-            return self.events[self.active_event_index()];
+            return self.unique_events[self.active_event_index()];
         });
         if (self.events.length > 0) {
             self.is_info = self.events[0].is_info;
@@ -279,7 +280,7 @@
             }
         };
         self.nextEvent = function(group) {
-            if (group.active_event_index() < group.event_count) {
+            if (group.active_event_index() < group.unique_events.length) {
                 group.active_event_index(group.active_event_index() + 1);
             }
         };
