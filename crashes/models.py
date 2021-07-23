@@ -1,7 +1,17 @@
 from django.db import models
 import functools
 
+class Project(models.Model):
+    name = models.CharField(max_length=255)
+    events_project_name = models.CharField(max_length=512)
+    events_endpoint_template = models.CharField(max_length=1024)
+    token = models.TextField()
+
+    def __str__(self):
+        return self.name
+
 class Category(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
     name = models.CharField(max_length=255, unique=True)
 
     class Meta:
@@ -25,6 +35,7 @@ class Category(models.Model):
         return functools.reduce(lambda sum, eg: sum + eg.event_fatal_count(), self.eventgroup_set.all(), 0)
 
 class EventGroup(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
     group_id = models.IntegerField()
     categories = models.ManyToManyField(Category, through='AssignedCategory')
 
@@ -41,12 +52,14 @@ class EventGroup(models.Model):
         return self.event_set.all().count()
 
 class EventTag(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
     key = models.CharField(max_length=255)
 
     def __str__(self):
         return self.key
 
 class EventTagKeyed(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
     event_tag = models.ForeignKey(EventTag, on_delete=models.CASCADE)
     value = models.CharField(max_length=255)
 
@@ -72,6 +85,7 @@ class EventTagKeyed(models.Model):
         return f"{self.event_tag.key} = {self.value}"
 
 class Event(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
     group = models.ForeignKey(EventGroup, on_delete=models.CASCADE)
     event_id = models.CharField(max_length=255)
     sentry_id = models.IntegerField()

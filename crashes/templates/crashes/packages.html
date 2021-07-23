@@ -22,20 +22,24 @@
                 <div class="panel panel-default">
                     <div class="panel-heading">Data status</div>
                     <div class="panel-body">
-                        <label>Latest event: {{ latest_event.event_created }} {{ latest_event.event_created|date:'e' }}</label>
-                        <label>Oldest event: {{ oldest_event.event_created }} {{ oldest_event.event_created|date:'e' }}</label>
-                        <label>Stacktraces processed: {{ stacktraces_processed|intcomma }} of {{ stacktraces_all|intcomma }}</label>
-                        <div class="progress">
-                            <div class="progress-bar progress-bar-success" role="progressbar" aria-valuenow="{{ processed_progress }}" aria-valuemin="0" aria-valuemax="100" style="width: {{ processed_progress }}%;">
-                            {{ processed_progress|floatformat:2 }}%
+                        {% if latest_event %}
+                            <label>Latest event: {{ latest_event.event_created }} {{ latest_event.event_created|date:'e' }}</label>
+                            <label>Oldest event: {{ oldest_event.event_created }} {{ oldest_event.event_created|date:'e' }}</label>
+                            <label>Stacktraces processed: {{ stacktraces_processed|intcomma }} of {{ stacktraces_all|intcomma }}</label>
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-success" role="progressbar" aria-valuenow="{{ processed_progress }}" aria-valuemin="0" aria-valuemax="100" style="width: {{ processed_progress }}%;">
+                                {{ processed_progress|floatformat:2 }}%
+                                </div>
                             </div>
-                        </div>
+                        {% else %}
+                            <label>No data yet.</label>
+                        {% endif %}
                     </div>
                 </div>
             </div>
         </div>
         <div class="row">
-            <div class="col-md-8"><h2>Package explorer</h2></div>
+            <div class="col-md-8"><h2>{{ project.name }} - package explorer</h2></div>
             <div class="col-md-offset-2 col-md-2"><div class="form-inline">
                 <label class="sr-only" for="packageSearch">Package Search</label>
                 <input data-bind="textInput: search" type="text" class="form-control" id="packageSearch" placeholder="Package Search">
@@ -295,7 +299,7 @@
         ko.applyBindings(VM(
             [
                 {% for package in packages %}
-                { name: '{{ package.name }}', url: '{% url 'package' package.name %}',
+                { name: '{{ package.name }}', url: '{% url 'package' project.id package.name %}',
                     dates: [
                     {% for date, counts in package.dates.items %}
                         { date: '{{ date }}', info: {{ counts.info }}, fatal : {{ counts.fatal }} },

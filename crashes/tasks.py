@@ -1,5 +1,7 @@
 from celery import shared_task, chain
-from .models import AssignedCategory, Category, Event, EventGroup, EventTag, EventTagKeyed, Stacktrace
+from .models import (
+    AssignedCategory, Category, Event, EventGroup, EventTag, EventTagKeyed, Stacktrace,
+    Project)
 
 from django.db import IntegrityError
 from django.core.cache import cache
@@ -7,29 +9,25 @@ from django.core.cache import cache
 import requests
 import datetime
 
-ENDPOINT = "https://sentry.prod.mozaws.net/api/0"
-EVENTS_ENDPOINT = ENDPOINT + "/projects/operations/fenix/events/"
-TOKEN = "716efdd8ce4942eab62e31a18e29e44b0f5efa6e701747d1876b521a0466d2fc"
-HEADERS = {"Authorization": "Bearer " + TOKEN}
+def events_endpoint_and_header(project):
+    events_endpoint = project.events_endpoint_template % project.events_project_name
+    return events_endpoint, {"Authorization": "Bearer " + project.token}
 
 # Local processing:
 @shared_task
-def reset_processing():
-    for s in Stacktrace.objects.filter(processed=True):
+def reset_processing(project_id):
+    project = Project.objects.get(id=project_id)
+    for s in Stacktrace.objects.filter(event__project=project, processed=True):
         s.processed = False
         s.save()
 
-    Category.objects.all().delete()
-    AssignedCategory.objects.all().delete()
+    Category.objects.filter(project=project).delete()
+    AssignedCategory.objects.filter(group__project=project).delete()
 
 @shared_task
-def process_all():
-    # linking didn't work!
-    process_stacktraces.apply_async((), link=process_categories.s())
-
-@shared_task
-def process_categories():
-    for p in Category.objects.all():
+def process_categories(project_id):
+    project = Project.objects.get(id=project_id)
+    for p in Category.objects.filter(project=project):
         process_category.delay(p.id)
 
 @shared_task
@@ -49,11 +47,12 @@ def process_category(category_id):
                 package['dates'][event.event_created.date().isoformat()]['info'] += 1
             else:
                 package['dates'][event.event_created.date().isoformat()]['fatal'] += 1
-    cache.set('computed_package_category_id_%s' % category_id, package, 60 * 60 * 3)
+    cache.set('p_%s_computed_package_category_id_%s' % (category.project.id, category_id), package, None)
 
 @shared_task
-def process_stacktraces():
-    for s in Stacktrace.objects.filter(processed=False):
+def process_stacktraces(project_id):
+    project = Project.objects.get(id=project_id)
+    for s in Stacktrace.objects.filter(event__project=project, processed=False):
         process_stacktrace.delay(s.id)
 
 @shared_task
@@ -67,11 +66,12 @@ def process_stacktrace(stacktrace_id):
             mozilla_set.add(package)
             break
     for package in mozilla_set:
+        # todo this can fail and produce cat=None
         try:
-            cat = Category(name = package)
+            cat = Category(project=s.event.project, name = package)
             cat.save()
         except IntegrityError:
-            cat = Category.objects.filter(name = package).first()
+            cat = Category.objects.filter(project=s.event.project, name = package).first()
 
         if AssignedCategory.objects.filter(group = s.event.group, category = cat).count() == 0:
             AssignedCategory(group = s.event.group, category = cat).save()
@@ -81,24 +81,28 @@ def process_stacktrace(stacktrace_id):
 
 # Sentry integration:
 @shared_task
-def fetch_all():
-    endpoint = EVENTS_ENDPOINT
+def fetch_project(project_id):
+    project = Project.objects.get(id=project_id)
+    endpoint, headers = events_endpoint_and_header(project)
 
-    r = requests.get(endpoint, headers=HEADERS)
+    r = requests.get(endpoint, headers=headers)
     r.raise_for_status()
 
-    process_endpoint.delay(r.json())
+    process_endpoint.delay(project_id, r.json())
 
     while "next" in r.links and r.links["next"]["results"] == "true":
-        r = requests.get(r.links["next"]["url"], headers=HEADERS)
+        r = requests.get(r.links["next"]["url"], headers=headers)
         r.raise_for_status()
-        process_endpoint.delay(r.json())
+        process_endpoint.delay(project_id, r.json())
 
 @shared_task
-def process_endpoint(fetched_json):
+def process_endpoint(project_id, fetched_json):
+    project = Project.objects.get(id=project_id)
     for e in fetched_json:
-        group, _ = EventGroup.objects.get_or_create(group_id = e["groupID"])
+        # TODO these are hitting db locked
+        group, _ = EventGroup.objects.get_or_create(project=project, group_id = e["groupID"])
         event, _ = Event.objects.get_or_create(
+            project=project,
             group = group,
             event_id = e["eventID"],
             sentry_id = e["id"],
@@ -114,10 +118,10 @@ def process_endpoint(fetched_json):
                 # too noisy
                 continue
 
-            event_tag, _ = EventTag.objects.get_or_create(key=tag["key"])
+            event_tag, _ = EventTag.objects.get_or_create(project=project, key=tag["key"])
 
             try:
-                keyed, _ = EventTagKeyed.objects.get_or_create(event_tag=event_tag, value=tag["value"])
+                keyed, _ = EventTagKeyed.objects.get_or_create(project=project, event_tag=event_tag, value=tag["value"])
                 event.tags.add(keyed)
             except Exception:
                 # we may be running into data races w/ celery running multiple tasks in parallel

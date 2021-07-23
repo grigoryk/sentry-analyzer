@@ -1,25 +1,31 @@
 from django.shortcuts import render
 from django.core.cache import cache
-from .models import Category, Stacktrace, Event
+from .models import Category, Stacktrace, Event, Project
 
 import datetime
 from collections import defaultdict
 
-def packages(request):
+def project(request, project_id):
+    project = Project.objects.get(id=project_id)
     packages = []
-    stacktraces_all = Stacktrace.objects.all().count()
-    stacktraces_processed = Stacktrace.objects.filter(processed=True).count()
-    processed_progress = (stacktraces_processed / stacktraces_all) * 100
+    stacktraces_all = Stacktrace.objects.filter(event__project=project).count()
+    stacktraces_processed = Stacktrace.objects.filter(event__project=project, processed=True).count()
 
-    latest_event = Event.objects.all().order_by('-event_created')[0]
-    oldest_event = Event.objects.all().order_by('event_created')[0]
+    processed_progress = 0
+    latest_event = None
+    oldest_event = None
+    if stacktraces_all > 0:
+        processed_progress = (stacktraces_processed / stacktraces_all) * 100
+        latest_event = Event.objects.all().order_by('-event_created')[0]
+        oldest_event = Event.objects.all().order_by('event_created')[0]
 
     for p in Category.objects.all():
-        package = cache.get('computed_package_category_id_%s' % p.id)
+        package = cache.get('p_%s_computed_package_category_id_%s' % (project.id, p.id))
         if package:
             packages.append(package)
 
     return render(request, 'crashes/packages.html', {
+        'project': project,
         'packages': packages,
         'stacktraces_processed': stacktraces_processed,
         'stacktraces_all': stacktraces_all,
@@ -28,7 +34,7 @@ def packages(request):
         'oldest_event': oldest_event
     })
 
-def package(request, package_name):
+def package(request, project_id, package_name):
     today = datetime.datetime.today()
     cutoff_date = today - datetime.timedelta(days=29)
     date_list = [(today - datetime.timedelta(days=x)).date() for x in range(30)]
@@ -66,5 +72,6 @@ def package(request, package_name):
         package['groups'].append(g)
 
     return render(request, 'crashes/package.html', {
+        'project': p.project,
         'package': package
     })

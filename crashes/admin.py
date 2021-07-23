@@ -1,7 +1,9 @@
 from django.contrib import admin
 from django.db.models import Count
 
-from .models import AssignedCategory, Category, Event, Stacktrace, EventTag, EventGroup, EventTagKeyed
+from .models import (
+    AssignedCategory, Category, Event, Stacktrace, EventTag, EventGroup, EventTagKeyed,
+    Project)
 
 class StacktraceInline(admin.TabularInline):
     model = Stacktrace
@@ -48,4 +50,10 @@ class StacktraceAdmin(admin.ModelAdmin):
     list_filter = ('processed',)
 
 admin.site.register(Stacktrace, StacktraceAdmin)
+
+class ProjectAdmin(admin.ModelAdmin):
+    list_display = ('name', 'events_project_name', 'events_endpoint_template')
+
+admin.site.register(Project, ProjectAdmin)
+
 admin.site.register(EventGroup)
