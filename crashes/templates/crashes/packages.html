@@ -97,10 +97,11 @@
             var self = this;
             self.name = package.name;
             self.url = package.url;
-            self.dates = ko.observableArray(package.dates);
+            self.dates = package.dates;
+            self.trends = package.trends;
             self.limitedDates = ko.computed(() => {
                 var now = Date.now();
-                return ko.utils.arrayFilter(self.dates(), (date) => {
+                return ko.utils.arrayFilter(self.dates, (date) => {
                     var d = Date.parse(date.date);
                     var delta = Math.floor((now - d) / (1000 * 60 * 60 * 24));
                     var timeRangeLimit = globalTimeRange();
@@ -135,16 +136,30 @@
                 if (globalTimeRange() == 1) {
                     return 0;
                 } else {
-                    return trendOLS(self.limitedDates(), 'info');
+                    return self.trends[globalTimeRange()]['info'];
                 }
             });
             self.fatal_trend = ko.computed(function() {
                 if (globalTimeRange() == 1) {
                     return 0;
                 } else {
-                    return trendOLS(self.limitedDates(), 'fatal');
+                    return self.trends[globalTimeRange()]['fatal'];
                 }
             });
+            // self.info_trend = ko.computed(function() {
+            //     if (globalTimeRange() == 1) {
+            //         return 0;
+            //     } else {
+            //         return trendOLS(self.limitedDates(), 'info');
+            //     }
+            // });
+            // self.fatal_trend = ko.computed(function() {
+            //     if (globalTimeRange() == 1) {
+            //         return 0;
+            //     } else {
+            //         return trendOLS(self.limitedDates(), 'fatal');
+            //     }
+            // });
 
             self.info_raw = ko.computed(() => {
                 var raw = rawValues(self.limitedDates(), 'info');
@@ -166,6 +181,12 @@
                 if (globalOlsCache.hasOwnProperty(dates_hash)) {
                     return globalOlsCache[dates_hash];
                 }
+
+                // from latest event to some point in the past (in # of days)
+                // for each package
+                //  based on the event count
+                //  calculate a trend line (-> trend slopes for each day)
+                //  calculate avg of trend slopes
 
                 var xset = [...Array(dates.length + 1).keys()].slice(1);
                 var yset = rawValues(dates, key);
@@ -304,7 +325,12 @@
                     {% for date, counts in package.dates.items %}
                         { date: '{{ date }}', info: {{ counts.info }}, fatal : {{ counts.fatal }} },
                     {% endfor %}
-                    ]
+                    ],
+                    trends: {
+                    {% for days_back, trend in package.trends.items %}
+                        '{{ days_back }}': {info: {{ trend.info }}, fatal : {{ trend.fatal }} },
+                    {% endfor %}
+                    }
                 },
                 {% endfor %}
             ]

@@ -3,13 +3,14 @@ from django.db.models import Count
 
 from .models import (
     AssignedCategory, Category, Event, Stacktrace, EventTag, EventGroup, EventTagKeyed,
-    Project)
+    Project, CategoryCount, ComputedTrend, ProjectEndpointCache)
 
 class StacktraceInline(admin.TabularInline):
     model = Stacktrace
 
 class EventAdmin(admin.ModelAdmin):
-    list_display = ('group_id', 'sentry_id', 'message', 'is_info')
+    list_display = ('group_id', 'sentry_id', 'message', 'is_info', 'event_created')
+    list_filter = ('project',)
     search_fields = ['tags__value', 'sentry_id', 'event_id', 'group__group_id', 'message']
     date_hierarchy = 'event_created'
 
@@ -52,8 +53,27 @@ class StacktraceAdmin(admin.ModelAdmin):
 admin.site.register(Stacktrace, StacktraceAdmin)
 
 class ProjectAdmin(admin.ModelAdmin):
-    list_display = ('name', 'events_project_name', 'events_endpoint_template')
+    list_display = ('name', 'events_endpoint')
 
 admin.site.register(Project, ProjectAdmin)
 
 admin.site.register(EventGroup)
+
+class CategoryCountAdmin(admin.ModelAdmin):
+    list_display = ('date', 'category', 'info_count', 'fatal_count')
+    list_filter = ('category__project',)
+    date_hierarchy = 'date'
+
+admin.site.register(CategoryCount, CategoryCountAdmin)
+
+class ComputedTrendAdmin(admin.ModelAdmin):
+    list_display = ('category', 'for_date', 'days_back', 'info_trend', 'fatal_trend')
+    list_filter = ('category__project',)
+
+admin.site.register(ComputedTrend, ComputedTrendAdmin)
+
+@admin.register(ProjectEndpointCache)
+class ProjectEndpointCacheAdmin(admin.ModelAdmin):
+    list_filter = ('project',)
+    list_display = ('project', 'sample_date')
+    date_hierarchy = 'sample_date'

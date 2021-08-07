@@ -3,8 +3,7 @@ import functools
 
 class Project(models.Model):
     name = models.CharField(max_length=255)
-    events_project_name = models.CharField(max_length=512)
-    events_endpoint_template = models.CharField(max_length=1024)
+    events_endpoint = models.CharField(max_length=1024)
     token = models.TextField()
 
     def __str__(self):
@@ -12,13 +11,14 @@ class Project(models.Model):
 
 class Category(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
-    name = models.CharField(max_length=255, unique=True)
+    name = models.CharField(max_length=255)
 
     class Meta:
+        unique_together = ['project', 'name']
         ordering = ['name']
 
     def __str__(self):
-        return self.name
+        return "%s (id=%s)" % (self.name, self.id)
 
     def group_count(self):
         return self.eventgroup_set.all().count()
@@ -34,10 +34,39 @@ class Category(models.Model):
     def event_fatal_count(self):
         return functools.reduce(lambda sum, eg: sum + eg.event_fatal_count(), self.eventgroup_set.all(), 0)
 
+class CategoryCount(models.Model):
+    category = models.ForeignKey(Category, on_delete=models.CASCADE)
+    date = models.DateField()
+    info_count = models.IntegerField()
+    fatal_count = models.IntegerField()
+
+    class Meta:
+        unique_together = ['category', 'date']
+
+    def __str__(self):
+        return "info=%s, fatal=%s for %s on %s" % (self.info_count, self.fatal_count, self.category, self.date)
+
+class ComputedTrend(models.Model):
+    for_date = models.DateField()
+    days_back = models.IntegerField()
+    info_trend = models.FloatField()
+    fatal_trend = models.FloatField()
+    category = models.ForeignKey(Category, on_delete=models.CASCADE)
+
+    class Meta:
+        # potentially a very large index?
+        unique_together = ['category', 'for_date', 'days_back']
+
+    def __str__(self):
+        return "info=%s, fatal=%s for %s as of %s going back %d" % (self.info_trend, self.fatal_trend, self.category, self.for_date, self.days_back)
+
 class EventGroup(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     group_id = models.IntegerField()
     categories = models.ManyToManyField(Category, through='AssignedCategory')
+
+    class Meta:
+        unique_together = ['project', 'group_id']
 
     def __str__(self):
         return f"{self.group_id} (events: {self.event_count()})"
@@ -54,6 +83,9 @@ class EventGroup(models.Model):
 class EventTag(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     key = models.CharField(max_length=255)
+
+    class Meta:
+        unique_together = ['project', 'key']
 
     def __str__(self):
         return self.key
@@ -79,7 +111,7 @@ class EventTagKeyed(models.Model):
         # IndexError: list index out of range
         # >>> r[0].delete()
         # >>> r[1].delete()
-        unique_together = ['event_tag', 'value']
+        unique_together = ['project', 'event_tag', 'value']
 
     def __str__(self):
         return f"{self.event_tag.key} = {self.value}"
@@ -97,6 +129,7 @@ class Event(models.Model):
     info = models.BooleanField(null=True, blank=True)
 
     class Meta:
+        unique_together = ['project', 'sentry_id']
         ordering = ['-event_created',]
 
     def is_info(self):
@@ -114,6 +147,9 @@ class AssignedCategory(models.Model):
     category = models.ForeignKey(Category, on_delete=models.CASCADE)
     confidence = models.FloatField(default=1.0)
 
+    class Meta:
+        unique_together = ['group', 'category']
+
 class Stacktrace(models.Model):
     event = models.ForeignKey(Event, on_delete=models.CASCADE)
     stacktrace = models.TextField()
@@ -121,3 +157,8 @@ class Stacktrace(models.Model):
 
     def __str__(self):
         return f"Stacktrace for {self.event.message}"
+
+class ProjectEndpointCache(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    json = models.TextField()
+    sample_date = models.DateTimeField()
