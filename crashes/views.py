@@ -57,7 +57,7 @@ def package(request, project_id, package_name):
     today = datetime.datetime.today()
     cutoff_date = today - datetime.timedelta(days=29)
     date_list = [(today - datetime.timedelta(days=x)).date() for x in range(30)]
-    p = Category.objects.get(name=package_name)
+    p = Category.objects.get(project__id=project_id, name=package_name)
     package = {
         "name": p.name,
         "groups": []
