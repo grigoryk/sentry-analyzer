@@ -2,6 +2,7 @@ from django.shortcuts import render
 from django.core.cache import cache
 from .models import Category, CategoryCount, Stacktrace, Event, Project, ComputedTrend
 
+import pytz
 import datetime
 from collections import defaultdict
 
@@ -18,17 +19,22 @@ def project(request, project_id):
         latest_event = Event.objects.filter(project=project).order_by('-event_created')[0]
         oldest_event = Event.objects.filter(project=project).order_by('event_created')[0]
 
-    today = datetime.datetime.today()
+    today = datetime.date.today() - datetime.timedelta(days=1)
     cutoff_date = today - datetime.timedelta(days=89)
-    date_list = [(today - datetime.timedelta(days=x)).date() for x in range(90)]
+    date_list = [(today - datetime.timedelta(days=x)) for x in range(90)]
     packages = []
+    # if data for 'today' is missing, trend selection won't work.
+    # what this should do instead:
+    # - lookup latest date for which we have calculated trends
+    # - get trends for that date
+    # - indicate in the output how many days old is the data, so that the UI can adjust
     for category in Category.objects.filter(project=project):
         package = {
             "name": category.name,
-            "dates": {d.isoformat(): {'info': 0, 'fatal': 0} for d in date_list},
+            "dates": {d.isoformat(): {'info': -1, 'fatal': -1} for d in date_list},
             "trends": {d: {'info': 0, 'fatal': 0} for d in range(len(date_list))}
         }
-        for cc in CategoryCount.objects.filter(category=category, date__gte=cutoff_date):
+        for cc in CategoryCount.objects.filter(category=category, date__lte=today, date__gte=cutoff_date):
             package['dates'][cc.date.isoformat()]['info'] = cc.info_count
             package['dates'][cc.date.isoformat()]['fatal'] = cc.fatal_count
 
