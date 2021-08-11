@@ -55,21 +55,30 @@ def process_category_trends(category_id):
     def reduce_regressions(fitted):
         diffs = []
         fitted_values = fitted.predict()
+        #print("fitted_values: %s" % fitted_values)
+        # 0 - today, 1 - yesterday, etc
+        # so, collect deltas of predictions for yesterday to today, etc.
         for i, r in enumerate(fitted_values[:-1]):
-            diffs.append(fitted_values[i + 1] - r)
-        reduced = []
-        for i in range(1, len(diffs)):
-            reduced.append(round(statistics.mean(diffs[0:i]), 3))
+            diffs.append(r - fitted_values[i + 1])
+        #print("diffs: %s" % diffs)
+        reduced = [
+            round(statistics.mean(diffs[0:i]), 3)
+            for i in range(1, len(diffs))
+        ]
+        #print("reduced: %s" % reduced)
         return reduced
 
     category = Category.objects.get(id=category_id)
-    cc = CategoryCount.objects.filter(category=category).order_by('-date')
+    # except for today, likely to be incomplete
+    cc = CategoryCount.objects.filter(category=category).order_by('-date')[1:]
     latest_date = cc[0].date
     info_counts = [c.info_count for c in cc]
     fatal_counts = [c.fatal_count for c in cc]
     days = [d for d in range(0, cc.count())]
 
+    #print("info counts: %s" % info_counts)
     info_reduced = reduce_regressions(sm.OLS(days, info_counts).fit())
+    #print("fatal counts: %s" % fatal_counts)
     fatal_reduced = reduce_regressions(sm.OLS(days, fatal_counts).fit())
 
     for i in range(0, len(info_reduced)):
