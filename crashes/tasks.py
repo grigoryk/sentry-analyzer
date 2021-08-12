@@ -192,7 +192,7 @@ def fetch_project(project_id):
     # if we have no data, fetched past three months.
     # otherwise, fetch missing data + 2 day overlap.
     if len(events) == 0:
-        today = datetime.datetime.today()
+        today = datetime.datetime.now().replace(tzinfo=pytz.UTC)
         cutoff_date = today - datetime.timedelta(days=90)
     else:
         newest_event = events[0]
