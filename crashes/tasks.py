@@ -1,6 +1,6 @@
 from celery import shared_task, chord, group
 from .models import (
-    AssignedCategory, Category, CategoryCount, ComputedTrend, Event, EventGroup, EventTag, EventTagKeyed, Stacktrace,
+    AssignedCategory, Category, CategoryCount, ComputedTrend, Event, EventGroup, EventTag, EventTagKeyed, ProcessEventTag, Stacktrace,
     Project, ProjectEndpointCache)
 
 from django.db import IntegrityError
@@ -40,16 +40,32 @@ def reset_processing(project_id):
     AssignedCategory.objects.filter(group__project=project).delete()
 
 @shared_task
+def process_project_event_tag_counts(project_id):
+    etks = set()
+    for pet in ProcessEventTag.objects.filter(project__id=project_id):
+        etks.update(list(EventTagKeyed.objects.filter(event_tag=pet.event_tag)))
+
+    all_tasks = []
+    for etk in etks:
+        for c in Category.objects.filter(project__id=project_id):
+            all_tasks.append(process_category_counts.si(c.id, etk.id))
+    group(all_tasks)().get(disable_sync_subtasks=False)
+
+@shared_task
 def process_project_counts(project_id):
     group(
         [
-            process_category_counts.si(p.id)
-            for p in Category.objects.filter(project__id=project_id)
+            process_category_counts.si(c.id, None)
+            for c in Category.objects.filter(project__id=project_id)
         ]
     )().get(disable_sync_subtasks=False)
 
 @shared_task
-def process_category_counts(category_id):
+def process_category_counts(category_id, etk_id):
+    etk = None
+    if etk_id:
+        etk = EventTagKeyed.objects.get(id=etk_id)
+
     today = datetime.datetime.now().replace(tzinfo=pytz.UTC)
     cutoff_date = today - datetime.timedelta(days=89)
     date_list = [(today - datetime.timedelta(days=x)).date() for x in range(90)]
@@ -57,7 +73,11 @@ def process_category_counts(category_id):
     category = Category.objects.get(id=category_id)
     dates = {d.isoformat(): {'info': 0, 'fatal': 0} for d in date_list}
     for group in category.eventgroup_set.filter(project=category.project):
-        for event in group.event_set.filter(event_created__gte=cutoff_date):
+        if etk:
+            events = group.event_set.filter(event_created__gte=cutoff_date, tags__in=[etk])
+        else:
+            events = group.event_set.filter(event_created__gte=cutoff_date)
+        for event in events:
             if event.is_info():
                 dates[event.event_created.date().isoformat()]['info'] += 1
             else:
@@ -67,6 +87,7 @@ def process_category_counts(category_id):
         CategoryCount.objects.update_or_create(
             category=category,
             date=d,
+            keyed_tag=etk,
             defaults = {
                 'info_count': dates[d]['info'],
                 'fatal_count': dates[d]['fatal']

@@ -45,12 +45,13 @@ class Category(models.Model):
 
 class CategoryCount(models.Model):
     category = models.ForeignKey(Category, on_delete=models.CASCADE)
+    keyed_tag = models.ForeignKey("EventTagKeyed", null=True, blank=True, on_delete=models.SET_NULL)
     date = models.DateField()
     info_count = models.IntegerField()
     fatal_count = models.IntegerField()
 
     class Meta:
-        unique_together = ['category', 'date']
+        unique_together = ['keyed_tag', 'category', 'date']
 
     def __str__(self):
         return "info=%s, fatal=%s for %s on %s" % (self.info_count, self.fatal_count, self.category, self.date)
@@ -61,10 +62,11 @@ class ComputedTrend(models.Model):
     info_trend = models.FloatField()
     fatal_trend = models.FloatField()
     category = models.ForeignKey(Category, on_delete=models.CASCADE)
+    keyed_tag = models.ForeignKey("EventTagKeyed", null=True, blank=True, on_delete=models.SET_NULL)
 
     class Meta:
         # potentially a very large index?
-        unique_together = ['category', 'for_date', 'days_back']
+        unique_together = ['keyed_tag', 'category', 'for_date', 'days_back']
 
     def __str__(self):
         return "info=%s, fatal=%s for %s as of %s going back %d" % (self.info_trend, self.fatal_trend, self.category, self.for_date, self.days_back)
@@ -97,7 +99,7 @@ class EventTag(models.Model):
         unique_together = ['project', 'key']
 
     def __str__(self):
-        return self.key
+        return "%s: %s" % (self.project.name, self.key)
 
 class EventTagKeyed(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
@@ -124,6 +126,13 @@ class EventTagKeyed(models.Model):
 
     def __str__(self):
         return f"{self.event_tag.key} = {self.value}"
+
+class ProcessEventTag(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    event_tag = models.ForeignKey(EventTag, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return "Process %s: %s" % (self.project, self.event_tag)
 
 class Event(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE)

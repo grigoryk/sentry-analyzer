@@ -3,7 +3,7 @@ from django.db.models import Count
 
 from .models import (
     AssignedCategory, Category, Event, Stacktrace, EventTag, EventGroup, EventTagKeyed,
-    Project, CategoryCount, ComputedTrend, ProjectEndpointCache, Organization)
+    Project, CategoryCount, ComputedTrend, ProjectEndpointCache, Organization, ProcessEventTag)
 
 class StacktraceInline(admin.TabularInline):
     model = Stacktrace
@@ -55,7 +55,7 @@ class ProjectAdmin(admin.ModelAdmin):
 
 @admin.register(CategoryCount)
 class CategoryCountAdmin(admin.ModelAdmin):
-    list_display = ('date', 'category', 'info_count', 'fatal_count')
+    list_display = ('date', 'category', 'keyed_tag', 'info_count', 'fatal_count')
     list_filter = ('category__project',)
     date_hierarchy = 'date'
 
@@ -73,5 +73,10 @@ class ProjectEndpointCacheAdmin(admin.ModelAdmin):
 @admin.register(Organization)
 class OrganizationAdmin(admin.ModelAdmin):
     list_display = ('name', 'slug')
+
+@admin.register(ProcessEventTag)
+class ProcessEventTagAdmin(admin.ModelAdmin):
+    list_display = ('project', 'event_tag',)
+    list_filter = ('project',)
 
 admin.site.register(EventGroup)
