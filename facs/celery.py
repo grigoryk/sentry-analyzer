@@ -16,7 +16,8 @@ app = Celery('facs')
 app.config_from_object('django.conf:settings', namespace='CELERY')
 
 app.conf.update(
-    BROKER_URL=os.environ.get('CLOUDAMQP_URL', 'amqp://guest:guest@localhost:5672/%2f')
+    BROKER_URL=os.environ.get('REDIS_URL', 'amqp://guest:guest@localhost:5672/%2f'),
+    CELERY_RESULT_BACKEND=os.environ.get('REDIS_URL', 'django-db')
 )
 
 # Load task modules from all registered Django app configs.
