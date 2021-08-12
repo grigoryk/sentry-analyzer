@@ -83,7 +83,7 @@ DATABASES = {
 CACHES = {
     'default': {
         'BACKEND': 'django_bmemcached.memcached.BMemcached',
-        'LOCATION': os.environ.get('MEMCACHEDCLOUD_SERVERS').split(','),
+        'LOCATION': os.environ.get('MEMCACHEDCLOUD_SERVERS', '').split(','),
         'OPTIONS': {
             'username': os.environ.get('MEMCACHEDCLOUD_USERNAME'),
             'password': os.environ.get('MEMCACHEDCLOUD_PASSWORD'),
@@ -138,7 +138,9 @@ django_heroku.settings(locals())
 import dj_database_url
 DATABASES['default'] = dj_database_url.config(conn_max_age=600, ssl_require=True)
 
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
 try:
-    from local_settings import *
+    from facs.local_settings import *
 except ImportError:
     pass
