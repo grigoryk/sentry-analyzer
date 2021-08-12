@@ -201,7 +201,7 @@ def fetch_project(project_id):
         cutoff_date = newest_date - datetime.timedelta(days=2)
 
     while True:
-        r = requests.get(next_endpoint, headers=headers)
+        r = requests.get(next_endpoint, headers=headers, timeout=20)
         r.raise_for_status()
         next_endpoint = process_request(project, r, cutoff_date)
         if not next_endpoint:

@@ -15,5 +15,9 @@ app = Celery('facs')
 #   should have a `CELERY_` prefix.
 app.config_from_object('django.conf:settings', namespace='CELERY')
 
+app.conf.update(
+    BROKER_URL=os.environ.get('CLOUDAMQP_URL', 'amqp://guest:guest@localhost:5672/%2f')
+)
+
 # Load task modules from all registered Django app configs.
 app.autodiscover_tasks()
