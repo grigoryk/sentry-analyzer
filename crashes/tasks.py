@@ -123,7 +123,7 @@ def process_category_trends(category_id):
 
     category = Category.objects.get(id=category_id)
     # except for today, likely to be incomplete
-    cc = CategoryCount.objects.filter(category=category).order_by('-date')[1:]
+    cc = CategoryCount.objects.filter(category=category, keyed_tag=None).order_by('-date')[1:]
     latest_date = cc[0].date
     info_counts = [c.info_count for c in cc]
     fatal_counts = [c.fatal_count for c in cc]
