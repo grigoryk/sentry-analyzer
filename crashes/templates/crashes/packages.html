@@ -320,7 +320,7 @@
         ko.applyBindings(VM(
             [
                 {% for package in packages %}
-                { name: '{{ package.name }}', url: '{% url 'package' project.id package.name %}',
+                { name: '{{ package.name }}', url: '{% url 'package' project.org.slug project.slug package.name %}',
                     dates: [
                     {% for date, counts in package.dates.items %}
                         { date: '{{ date }}', info: {{ counts.info }}, fatal : {{ counts.fatal }} },

@@ -1,8 +1,17 @@
 from django.db import models
 import functools
 
-class Project(models.Model):
+class Organization(models.Model):
     name = models.CharField(max_length=255)
+    slug = models.SlugField()
+
+    def __str__(self):
+        return self.name
+
+class Project(models.Model):
+    org = models.ForeignKey(Organization, on_delete=models.CASCADE, null=True, blank=True)
+    name = models.CharField(max_length=255)
+    slug = models.SlugField(null=True, blank=True)
     events_endpoint = models.CharField(max_length=1024)
     token = models.TextField()
 

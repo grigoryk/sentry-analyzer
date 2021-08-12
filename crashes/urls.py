@@ -1,7 +1,8 @@
-from django.urls import include, path
+from django.urls import path
 from . import views
 
 urlpatterns = [
-    path('<int:project_id>', views.project, name='project'),
-    path('<int:project_id>/package/<str:package_name>', views.package, name='package')
+    path('<slug:org_slug>/', views.org, name='org'),
+    path('<slug:org_slug>/<slug:project_slug>/', views.project, name='project'),
+    path('<slug:org_slug>/<slug:project_slug>/package/<str:package_name>/', views.package, name='package')
 ]

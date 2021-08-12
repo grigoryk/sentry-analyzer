@@ -1,0 +1,18 @@
+{% extends "crashes/base.html" %}
+
+{% block title %}Sentry analyzer: {{ org.name }}{% endblock %}
+
+{% block content %}
+    <div class="jumbotron">
+        <div class="row">
+            <div class="col-md-8"><h2>{{ org.name }} - Sentry Analyzer</h2></div>
+        </div>
+        <div class="row" style="padding-top: 20px;">
+            <div class="col-md-12">
+                {% for project in org.project_set.all %}
+                    <h2><a href="{% url 'project' org.slug project.slug %}">{{ project.name }}</a></h2>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+{% endblock %}

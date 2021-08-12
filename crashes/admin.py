@@ -3,11 +3,12 @@ from django.db.models import Count
 
 from .models import (
     AssignedCategory, Category, Event, Stacktrace, EventTag, EventGroup, EventTagKeyed,
-    Project, CategoryCount, ComputedTrend, ProjectEndpointCache)
+    Project, CategoryCount, ComputedTrend, ProjectEndpointCache, Organization)
 
 class StacktraceInline(admin.TabularInline):
     model = Stacktrace
 
+@admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
     list_display = ('group_id', 'sentry_id', 'message', 'is_info', 'event_created')
     list_filter = ('project',)
@@ -20,12 +21,12 @@ class EventAdmin(admin.ModelAdmin):
     inlines = [
         StacktraceInline,
     ]
-admin.site.register(Event, EventAdmin)
 
+@admin.register(EventTag)
 class EventTagAdmin(admin.ModelAdmin):
     list_display = ('key',)
-admin.site.register(EventTag, EventTagAdmin)
 
+@admin.register(EventTagKeyed)
 class EventTagKeyedAdmin(admin.ModelAdmin):
     list_display = ('tag_key', 'value')
     list_filter = ('event_tag',)
@@ -33,47 +34,44 @@ class EventTagKeyedAdmin(admin.ModelAdmin):
     def tag_key(self, obj):
         return obj.event_tag.key
 
-admin.site.register(EventTagKeyed, EventTagKeyedAdmin)
-
+@admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
     ordering = ('name',)
 
-admin.site.register(Category, CategoryAdmin)
-
+@admin.register(AssignedCategory)
 class AssignedCategoryAdmin(admin.ModelAdmin):
     list_display = ('group', 'category')
     list_filter = ('category',)
 
-admin.site.register(AssignedCategory, AssignedCategoryAdmin)
-
+@admin.register(Stacktrace)
 class StacktraceAdmin(admin.ModelAdmin):
     list_display = ('event', 'processed',)
     list_filter = ('processed',)
 
-admin.site.register(Stacktrace, StacktraceAdmin)
-
+@admin.register(Project)
 class ProjectAdmin(admin.ModelAdmin):
-    list_display = ('name', 'events_endpoint')
+    list_display = ('name', 'slug', 'org', 'events_endpoint')
+    list_filter = ('org',)
 
-admin.site.register(Project, ProjectAdmin)
-
-admin.site.register(EventGroup)
-
+@admin.register(CategoryCount)
 class CategoryCountAdmin(admin.ModelAdmin):
     list_display = ('date', 'category', 'info_count', 'fatal_count')
     list_filter = ('category__project',)
     date_hierarchy = 'date'
 
-admin.site.register(CategoryCount, CategoryCountAdmin)
-
+@admin.register(ComputedTrend)
 class ComputedTrendAdmin(admin.ModelAdmin):
     list_display = ('category', 'for_date', 'days_back', 'info_trend', 'fatal_trend')
     list_filter = ('category__project',)
-
-admin.site.register(ComputedTrend, ComputedTrendAdmin)
 
 @admin.register(ProjectEndpointCache)
 class ProjectEndpointCacheAdmin(admin.ModelAdmin):
     list_filter = ('project',)
     list_display = ('project', 'sample_date')
     date_hierarchy = 'sample_date'
+
+@admin.register(Organization)
+class OrganizationAdmin(admin.ModelAdmin):
+    list_display = ('name', 'slug')
+
+admin.site.register(EventGroup)

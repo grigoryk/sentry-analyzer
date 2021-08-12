@@ -1,13 +1,17 @@
 from django.shortcuts import render
 from django.core.cache import cache
-from .models import Category, CategoryCount, Stacktrace, Event, Project, ComputedTrend
+from .models import Category, CategoryCount, Organization, Stacktrace, Event, Project, ComputedTrend
 
-import pytz
 import datetime
-from collections import defaultdict
 
-def project(request, project_id):
-    project = Project.objects.get(id=project_id)
+def org(request, org_slug):
+    org = Organization.objects.get(slug=org_slug)
+    return render(request, 'crashes/org.html', {
+        'org': org
+    })
+
+def project(request, org_slug, project_slug):
+    project = Project.objects.get(slug=project_slug, org__slug=org_slug)
     stacktraces_all = Stacktrace.objects.filter(event__project=project).count()
     stacktraces_processed = Stacktrace.objects.filter(event__project=project, processed=True).count()
 
@@ -59,11 +63,11 @@ def project(request, project_id):
         'oldest_event': oldest_event
     })
 
-def package(request, project_id, package_name):
+def package(request, org_slug, project_slug, package_name):
     today = datetime.datetime.today()
     cutoff_date = today - datetime.timedelta(days=29)
     date_list = [(today - datetime.timedelta(days=x)).date() for x in range(30)]
-    p = Category.objects.get(project__id=project_id, name=package_name)
+    p = Category.objects.get(project__org__slug=org_slug, project__slug=project_slug, name=package_name)
     package = {
         "name": p.name,
         "groups": []
