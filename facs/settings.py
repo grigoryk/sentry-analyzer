@@ -24,7 +24,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET_KEY = '&hk8^@!_40&m!-@r^-p9l$6kqy^v($)dhcfp)xo)9i0wy93mpt'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = []
 
@@ -135,3 +135,8 @@ CELERY_RESULT_BACKEND = 'django-db'
 
 # Activate Django-Heroku.
 django_heroku.settings(locals())
+
+try:
+    from local_settings import *
+except ImportError:
+    pass
