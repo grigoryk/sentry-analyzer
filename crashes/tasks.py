@@ -241,8 +241,8 @@ def process_project_endpoints(project_id):
     # once all are done, run process_stacktraces
     group(
         [
-            process_endpoint_events.si(pec.id)
-            for pec in ProjectEndpointCache.objects.filter(project__id=project_id)
+            process_endpoint_events.si(pec['id'])
+            for pec in ProjectEndpointCache.objects.filter(project__id=project_id).values('id')
         ]
     )().get(disable_sync_subtasks=False)
 
