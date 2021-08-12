@@ -124,7 +124,7 @@ class Event(models.Model):
     event_received = models.DateTimeField()
     event_created = models.DateTimeField()
     created = models.DateTimeField(auto_now_add=True)
-    message = models.CharField(max_length=500, null=True, blank=True)
+    message = models.CharField(max_length=2048, null=True, blank=True)
     tags = models.ManyToManyField(EventTagKeyed)
     info = models.BooleanField(null=True, blank=True)
 
