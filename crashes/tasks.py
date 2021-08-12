@@ -41,16 +41,48 @@ def reset_processing(project_id):
 
 @shared_task
 def process_project_counts(project_id):
-    project = Project.objects.get(id=project_id)
-    for p in Category.objects.filter(project=project):
-        process_category_counts(p.id)
+    group(
+        [
+            process_category_counts.si(p.id)
+            for p in Category.objects.filter(project__id=project_id)
+        ]
+    )().get(disable_sync_subtasks=False)
+
+@shared_task
+def process_category_counts(category_id):
+    today = datetime.datetime.now().replace(tzinfo=pytz.UTC)
+    cutoff_date = today - datetime.timedelta(days=89)
+    date_list = [(today - datetime.timedelta(days=x)).date() for x in range(90)]
+
+    category = Category.objects.get(id=category_id)
+    dates = {d.isoformat(): {'info': 0, 'fatal': 0} for d in date_list}
+    for group in category.eventgroup_set.filter(project=category.project):
+        for event in group.event_set.filter(event_created__gte=cutoff_date):
+            if event.is_info():
+                dates[event.event_created.date().isoformat()]['info'] += 1
+            else:
+                dates[event.event_created.date().isoformat()]['fatal'] += 1
+
+    for d in dates:
+        CategoryCount.objects.update_or_create(
+            category=category,
+            date=d,
+            defaults = {
+                'info_count': dates[d]['info'],
+                'fatal_count': dates[d]['fatal']
+            }
+        )
 
 @shared_task
 def process_project_trends(project_id):
-    project = Project.objects.get(id=project_id)
-    for p in Category.objects.filter(project=project):
-        process_category_trends(p.id)
+    group(
+        [
+            process_category_trends.si(p.id)
+            for p in Category.objects.filter(project__id=project_id)
+        ]
+    )().get(disable_sync_subtasks=False)
 
+@shared_task
 def process_category_trends(category_id):
     def reduce_regressions(fitted):
         diffs = []
@@ -91,49 +123,6 @@ def process_category_trends(category_id):
                 'fatal_trend': fatal_reduced[i]
             }
         )
-
-def process_category_counts(category_id):
-    today = datetime.datetime.today()
-    cutoff_date = today - datetime.timedelta(days=89)
-    date_list = [(today - datetime.timedelta(days=x)).date() for x in range(90)]
-
-    category = Category.objects.get(id=category_id)
-    dates = {d.isoformat(): {'info': 0, 'fatal': 0} for d in date_list}
-    for group in category.eventgroup_set.filter(project=category.project):
-        for event in group.event_set.filter(event_created__gte=cutoff_date):
-            if event.is_info():
-                dates[event.event_created.date().isoformat()]['info'] += 1
-            else:
-                dates[event.event_created.date().isoformat()]['fatal'] += 1
-
-    for d in dates:
-        CategoryCount.objects.update_or_create(
-            category=category,
-            date=d,
-            defaults = {
-                'info_count': dates[d]['info'],
-                'fatal_count': dates[d]['fatal']
-            }
-        )
-
-@shared_task
-def process_category_old(category_id):
-    today = datetime.datetime.today()
-    cutoff_date = today - datetime.timedelta(days=89)
-    date_list = [(today - datetime.timedelta(days=x)).date() for x in range(90)]
-
-    category = Category.objects.get(id=category_id)
-    package = {
-        "name": category.name,
-        "dates": {d.isoformat(): {'info': 0, 'fatal': 0} for d in date_list}
-    }
-    for group in category.eventgroup_set.filter(project=category.project):
-        for event in group.event_set.filter(event_created__gte=cutoff_date):
-            if event.is_info():
-                package['dates'][event.event_created.date().isoformat()]['info'] += 1
-            else:
-                package['dates'][event.event_created.date().isoformat()]['fatal'] += 1
-    cache.set('p_%s_computed_package_category_id_%s' % (category.project.id, category_id), package, None)
 
 @shared_task
 def process_stacktraces(project_id):
