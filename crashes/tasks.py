@@ -252,25 +252,30 @@ def process_endpoint_events(endpoint_cache_id):
     project = pec.project
     events = json.loads(pec.json)
     for e in events:
-        # TODO these are hitting db locked
-        # crashes.models.EventGroup.MultipleObjectsReturned
+        # access pattern:
+        # read first, if absent try to write; if that fails, another worker could have written
+        # already, so try to read which should succeed.
         try:
-            group = EventGroup(project=project, group_id = e["groupID"])
-            group.save()
+            group = EventGroup.objects.filter(project=project, group_id = e["groupID"]).first()
+            if not group:
+                group = EventGroup(project=project, group_id = e["groupID"])
+                group.save()
         except IntegrityError:
             group = EventGroup.objects.filter(project=project, group_id = e["groupID"]).first()
 
         try:
-            event = Event(
-                project=project,
-                group = group,
-                event_id = e["eventID"],
-                sentry_id = e["id"],
-                event_received = e["dateReceived"],
-                event_created = e["dateCreated"],
-                message = e["message"]
-            )
-            event.save()
+            event = Event.objects.filter(project=project, sentry_id=e["id"]).first()
+            if not event:
+                event = Event(
+                    project=project,
+                    group = group,
+                    event_id = e["eventID"],
+                    sentry_id = e["id"],
+                    event_received = e["dateReceived"],
+                    event_created = e["dateCreated"],
+                    message = e["message"]
+                )
+                event.save()
         except IntegrityError:
             event = Event.objects.filter(project=project, sentry_id=e["id"]).first()
 
@@ -280,14 +285,18 @@ def process_endpoint_events(endpoint_cache_id):
                 continue
 
             try:
-                event_tag = EventTag(project=project, key=tag["key"])
-                event_tag.save()
+                event_tag = EventTag.objects.filter(project=project, key=tag["key"]).first()
+                if not event_tag:
+                    event_tag = EventTag(project=project, key=tag["key"])
+                    event_tag.save()
             except IntegrityError:
                 event_tag = EventTag.objects.filter(project=project, key=tag["key"]).first()
 
             try:
-                keyed = EventTagKeyed(project=project, event_tag=event_tag, value=tag["value"])
-                keyed.save()
+                keyed = EventTagKeyed.objects.filter(project=project, event_tag=event_tag, value=tag["value"]).first()
+                if not keyed:
+                    keyed = EventTagKeyed(project=project, event_tag=event_tag, value=tag["value"])
+                    keyed.save()
             except IntegrityError:
                 keyed = EventTagKeyed.objects.filter(project=project, event_tag=event_tag, value=tag["value"]).first()
 
