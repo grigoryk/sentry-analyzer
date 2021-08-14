@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.humanize',
     'django_celery_results',
+    'django_celery_beat',
 
     'crashes',
 ]

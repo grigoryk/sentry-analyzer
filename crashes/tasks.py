@@ -13,6 +13,13 @@ import statistics
 import pytz
 import json
 
+# TODO assignedcategory insert violations
+
+@shared_task
+def update_all_projects():
+    for p in Project.objects.all():
+        do_all_for_project(p.id)
+
 def do_all_for_project(project_id):
     # chain:
     # - fetch_project
