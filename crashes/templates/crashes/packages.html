@@ -163,12 +163,12 @@
 
             self.info_raw = ko.computed(() => {
                 var raw = rawValues(self.limitedDates(), 'info');
-                return raw.slice(0, raw.length - 1);
+                return raw.slice(0, raw.length);
             });
 
             self.fatal_raw = ko.computed(() => {
                 var raw = rawValues(self.limitedDates(), 'fatal');
-                return raw.slice(0, raw.length - 1);
+                return raw.slice(0, raw.length);
             });
 
             function rawValues(dates, key) {
