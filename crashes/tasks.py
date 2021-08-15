@@ -239,14 +239,14 @@ def fetch_project(project_id):
 
     newest_event = Event.objects.filter(project=project).order_by('-event_created').values('event_created').first()
     # if we have no data, fetched past three months.
-    # otherwise, fetch missing data + 2 day overlap.
+    # otherwise, fetch missing data + 1 day overlap.
     if not newest_event:
         today = datetime.datetime.now().replace(tzinfo=pytz.UTC)
         cutoff_date = today - datetime.timedelta(days=90)
     else:
         # go back a bit more than we need to, just in case - it's possible to encounter out-of-order events
         newest_date = newest_event['event_created'].replace(tzinfo=pytz.UTC)
-        cutoff_date = newest_date - datetime.timedelta(days=2)
+        cutoff_date = newest_date - datetime.timedelta(days=1)
 
     while True:
         r = requests.get(next_endpoint, headers=headers, timeout=20)
