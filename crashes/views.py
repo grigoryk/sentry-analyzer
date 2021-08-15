@@ -38,11 +38,11 @@ def project(request, org_slug, project_slug):
             "dates": {d.isoformat(): {'info': -1, 'fatal': -1} for d in date_list},
             "trends": {d: {'info': 0, 'fatal': 0} for d in range(len(date_list))}
         }
-        for cc in CategoryCount.objects.filter(category__id=category['id'], date__lte=today, date__gte=cutoff_date).values('date', 'info_count', 'fatal_count'):
+        for cc in CategoryCount.objects.filter(keyed_tag=None, category__id=category['id'], date__lte=today, date__gte=cutoff_date).values('date', 'info_count', 'fatal_count'):
             package['dates'][cc['date'].isoformat()]['info'] = cc['info_count']
             package['dates'][cc['date'].isoformat()]['fatal'] = cc['fatal_count']
 
-        for ct in ComputedTrend.objects.filter(category__id=category['id'], for_date=today, days_back__lt=len(date_list)).values('days_back', 'info_trend', 'fatal_trend'):
+        for ct in ComputedTrend.objects.filter(keyed_tag=None, category__id=category['id'], for_date=today, days_back__lt=len(date_list)).values('days_back', 'info_trend', 'fatal_trend'):
             package['trends'][ct['days_back']]['info'] = ct['info_trend']
             package['trends'][ct['days_back']]['fatal'] = ct['fatal_trend']
 
