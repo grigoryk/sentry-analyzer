@@ -157,8 +157,8 @@ def process_stacktraces(project_id):
     project = Project.objects.get(id=project_id)
     group(
         [
-            process_stacktrace.si(s.id)
-            for s in Stacktrace.objects.filter(event__project=project, processed=False)
+            process_stacktrace.si(s['id'])
+            for s in Stacktrace.objects.filter(event__project=project, processed=False).values('id')
         ]
     )().get(disable_sync_subtasks=False)
 
@@ -205,16 +205,15 @@ def fetch_project(project_id):
     project = Project.objects.get(id=project_id)
     next_endpoint, headers = events_endpoint_and_header(project)
 
-    events = Event.objects.filter(project=project).order_by('-event_created')
+    newest_event = Event.objects.filter(project=project).order_by('-event_created').values('event_created').first()
     # if we have no data, fetched past three months.
     # otherwise, fetch missing data + 2 day overlap.
-    if len(events) == 0:
+    if not newest_event:
         today = datetime.datetime.now().replace(tzinfo=pytz.UTC)
         cutoff_date = today - datetime.timedelta(days=90)
     else:
-        newest_event = events[0]
         # go back a bit more than we need to, just in case - it's possible to encounter out-of-order events
-        newest_date = newest_event.event_created.replace(tzinfo=pytz.UTC)
+        newest_date = newest_event['event_created'].replace(tzinfo=pytz.UTC)
         cutoff_date = newest_date - datetime.timedelta(days=2)
 
     while True:
