@@ -15,6 +15,21 @@ import json
 
 # TODO assignedcategory insert violations
 
+def get_or_create_safe(filter_f, create_f):
+    # access pattern:
+    # read first, if absent try to write; if that fails, another worker could have written
+    # already, so try to read which should succeed.
+    # TODO use objects.get_or_create? take model and kwargs instead?
+    try:
+        obj = filter_f().first()
+        if not obj:
+            obj = create_f()
+            obj.save()
+    except IntegrityError:
+        obj = filter_f().first()
+
+    return obj
+
 @shared_task
 def update_all_projects():
     for p in Project.objects.all():
@@ -154,30 +169,47 @@ def process_category_trends(category_id):
 
 @shared_task
 def process_stacktraces(project_id):
-    project = Project.objects.get(id=project_id)
+    batch_size = 1000
+    batches = []
+    all_stacktrace_ids = Stacktrace.objects.filter(event__project__id=project_id, processed=False).values('id')
+    stacktrace_count = len(all_stacktrace_ids)
+    for i in range(0, stacktrace_count, batch_size):
+        batch = []
+        for j in range(i, i + batch_size):
+            if j >= stacktrace_count:
+                break
+            batch.append(all_stacktrace_ids[j]['id'])
+        batches.append(batch)
+
     group(
         [
-            process_stacktrace.si(s['id'])
-            for s in Stacktrace.objects.filter(event__project=project, processed=False).values('id')
+            process_stacktrace_batch.si(batch) for batch in batches
         ]
     )().get(disable_sync_subtasks=False)
 
 @shared_task
-def process_stacktrace(stacktrace_id):
-    s = Stacktrace.objects.select_related('event').get(id=stacktrace_id)
-    mozilla_set = set()
-    for line in s.stacktrace.split():
-        if line.startswith("mozilla") or line.startswith("org.mozilla"):
-            parts = line.split(".")
-            package = ".".join((p for p in parts if not p[0].isupper() and p[0].isalpha()))
-            mozilla_set.add(package)
-            break
-    for package in mozilla_set:
-        cat, _ = Category.objects.get_or_create(project=s.event.project, name = package)
-        AssignedCategory.objects.get_or_create(group = s.event.group, category = cat)
+def process_stacktrace_batch(batch):
+    stacktraces = Stacktrace.objects.select_related('event').filter(id__in=batch)
+    for s in stacktraces:
+        mozilla_set = set()
+        for line in s.stacktrace.split():
+            if line.startswith("mozilla") or line.startswith("org.mozilla"):
+                parts = line.split(".")
+                package = ".".join((p for p in parts if not p[0].isupper() and p[0].isalpha()))
+                mozilla_set.add(package)
+                break
+        for package in mozilla_set:
+            cat = get_or_create_safe(
+                lambda: Category.objects.filter(project=s.event.project, name = package),
+                lambda: Category(project=s.event.project, name = package)
+            )
+            _ = get_or_create_safe(
+                lambda: AssignedCategory.objects.filter(group = s.event.group, category = cat),
+                lambda: AssignedCategory(group = s.event.group, category = cat)
+            )
 
-    s.processed = True
-    s.save()
+        s.processed = True
+        s.save()
 
 # Sentry integration:
 @shared_task
@@ -258,53 +290,38 @@ def process_endpoint_events(endpoint_cache_id):
     project = pec.project
     events = json.loads(pec.json)
     for e in events:
-        # access pattern:
-        # read first, if absent try to write; if that fails, another worker could have written
-        # already, so try to read which should succeed.
-        try:
-            group = EventGroup.objects.filter(project=project, group_id = e["groupID"]).first()
-            if not group:
-                group = EventGroup(project=project, group_id = e["groupID"])
-                group.save()
-        except IntegrityError:
-            group = EventGroup.objects.filter(project=project, group_id = e["groupID"]).first()
+        group = get_or_create_safe(
+            lambda: EventGroup.objects.filter(project=project, group_id = e["groupID"]),
+            lambda: EventGroup(project=project, group_id = e["groupID"])
+        )
 
-        try:
-            event = Event.objects.filter(project=project, sentry_id=e["id"]).first()
-            if not event:
-                event = Event(
-                    project=project,
-                    group = group,
-                    event_id = e["eventID"],
-                    sentry_id = e["id"],
-                    event_received = e["dateReceived"],
-                    event_created = e["dateCreated"],
-                    message = e["message"]
-                )
-                event.save()
-        except IntegrityError:
-            event = Event.objects.filter(project=project, sentry_id=e["id"]).first()
+        event = get_or_create_safe(
+            lambda: Event.objects.filter(project=project, sentry_id=e["id"]),
+            lambda: Event(
+                project=project,
+                group = group,
+                event_id = e["eventID"],
+                sentry_id = e["id"],
+                event_received = e["dateReceived"],
+                event_created = e["dateCreated"],
+                message = e["message"]
+            )
+        )
 
         for tag in e["tags"]:
             if tag["key"] == "user":
                 # too noisy
                 continue
 
-            try:
-                event_tag = EventTag.objects.filter(project=project, key=tag["key"]).first()
-                if not event_tag:
-                    event_tag = EventTag(project=project, key=tag["key"])
-                    event_tag.save()
-            except IntegrityError:
-                event_tag = EventTag.objects.filter(project=project, key=tag["key"]).first()
+            event_tag = get_or_create_safe(
+                lambda: EventTag.objects.filter(project=project, key=tag["key"]),
+                lambda: EventTag(project=project, key=tag["key"])
+            )
 
-            try:
-                keyed = EventTagKeyed.objects.filter(project=project, event_tag=event_tag, value=tag["value"]).first()
-                if not keyed:
-                    keyed = EventTagKeyed(project=project, event_tag=event_tag, value=tag["value"])
-                    keyed.save()
-            except IntegrityError:
-                keyed = EventTagKeyed.objects.filter(project=project, event_tag=event_tag, value=tag["value"]).first()
+            keyed = get_or_create_safe(
+                lambda: EventTagKeyed.objects.filter(project=project, event_tag=event_tag, value=tag["value"]),
+                lambda: EventTagKeyed(project=project, event_tag=event_tag, value=tag["value"])
+            )
 
             event.tags.add(keyed)
 
