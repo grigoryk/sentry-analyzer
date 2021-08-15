@@ -20,8 +20,8 @@ def project(request, org_slug, project_slug):
     oldest_event = None
     if stacktraces_all > 0:
         processed_progress = (stacktraces_processed / stacktraces_all) * 100
-        latest_event = Event.objects.filter(project=project).order_by('-event_created')[0]
-        oldest_event = Event.objects.filter(project=project).order_by('event_created')[0]
+        latest_event = Event.objects.filter(project=project).order_by('-event_created').values('event_created')[0]
+        oldest_event = Event.objects.filter(project=project).order_by('event_created').values('event_created')[0]
 
     today = datetime.date.today() - datetime.timedelta(days=1)
     cutoff_date = today - datetime.timedelta(days=89)
@@ -32,26 +32,21 @@ def project(request, org_slug, project_slug):
     # - lookup latest date for which we have calculated trends
     # - get trends for that date
     # - indicate in the output how many days old is the data, so that the UI can adjust
-    for category in Category.objects.filter(project=project):
+    for category in Category.objects.filter(project=project).values('id', 'name'):
         package = {
-            "name": category.name,
+            "name": category['name'],
             "dates": {d.isoformat(): {'info': -1, 'fatal': -1} for d in date_list},
             "trends": {d: {'info': 0, 'fatal': 0} for d in range(len(date_list))}
         }
-        for cc in CategoryCount.objects.filter(category=category, date__lte=today, date__gte=cutoff_date):
-            package['dates'][cc.date.isoformat()]['info'] = cc.info_count
-            package['dates'][cc.date.isoformat()]['fatal'] = cc.fatal_count
+        for cc in CategoryCount.objects.filter(category__id=category['id'], date__lte=today, date__gte=cutoff_date).values('date', 'info_count', 'fatal_count'):
+            package['dates'][cc['date'].isoformat()]['info'] = cc['info_count']
+            package['dates'][cc['date'].isoformat()]['fatal'] = cc['fatal_count']
 
-        for ct in ComputedTrend.objects.filter(category=category, for_date=today, days_back__lt=len(date_list)):
-            package['trends'][ct.days_back]['info'] = ct.info_trend
-            package['trends'][ct.days_back]['fatal'] = ct.fatal_trend
+        for ct in ComputedTrend.objects.filter(category__id=category['id'], for_date=today, days_back__lt=len(date_list)).values('days_back', 'info_trend', 'fatal_trend'):
+            package['trends'][ct['days_back']]['info'] = ct['info_trend']
+            package['trends'][ct['days_back']]['fatal'] = ct['fatal_trend']
 
         packages.append(package)
-
-    # for p in Category.objects.filter(project=project):
-    #     package = cache.get('p_%s_computed_package_category_id_%s' % (project.id, p.id))
-    #     if package:
-    #         packages.append(package)
 
     return render(request, 'crashes/packages.html', {
         'project': project,
