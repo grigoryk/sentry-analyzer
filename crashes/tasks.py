@@ -13,6 +13,8 @@ import statistics
 import pytz
 import json
 
+DAYS_MAX = 30
+
 # TODO assignedcategory insert violations
 
 def get_or_create_safe(filter_f, create_f):
@@ -88,12 +90,16 @@ def process_category_counts(category_id, etk_id):
     if etk_id:
         etk = EventTagKeyed.objects.get(id=etk_id)
 
-    today = datetime.datetime.now().replace(tzinfo=pytz.UTC)
-    cutoff_date = today - datetime.timedelta(days=89)
-    date_list = [(today - datetime.timedelta(days=x)).date() for x in range(90)]
-
     category = Category.objects.get(id=category_id)
+    # cutoff_date = get_cutoff_date(category.project)
+
+    today = datetime.datetime.now().replace(tzinfo=pytz.UTC)
+    cutoff_date = today - datetime.timedelta(days=DAYS_MAX-1)
+
+    # date_list = [(today - datetime.timedelta(days=x)).date() for x in range((today - cutoff_date).days + 1)]
+    date_list = [(today - datetime.timedelta(days=x)).date() for x in range(DAYS_MAX)]
     dates = {d.isoformat(): {'info': 0, 'fatal': 0} for d in date_list}
+
     for group in category.eventgroup_set.filter(project=category.project):
         if etk:
             events = group.event_set.filter(event_created__gte=cutoff_date, tags__in=[etk])
@@ -237,16 +243,7 @@ def fetch_project(project_id):
     project = Project.objects.get(id=project_id)
     next_endpoint, headers = events_endpoint_and_header(project)
 
-    newest_event = Event.objects.filter(project=project).order_by('-event_created').values('event_created').first()
-    # if we have no data, fetched past three months.
-    # otherwise, fetch missing data + 1 day overlap.
-    if not newest_event:
-        today = datetime.datetime.now().replace(tzinfo=pytz.UTC)
-        cutoff_date = today - datetime.timedelta(days=90)
-    else:
-        # go back a bit more than we need to, just in case - it's possible to encounter out-of-order events
-        newest_date = newest_event['event_created'].replace(tzinfo=pytz.UTC)
-        cutoff_date = newest_date - datetime.timedelta(days=1)
+    cutoff_date = get_cutoff_date(project)
 
     while True:
         r = requests.get(next_endpoint, headers=headers, timeout=20)
@@ -254,6 +251,19 @@ def fetch_project(project_id):
         next_endpoint = process_request(project, r, cutoff_date)
         if not next_endpoint:
             break
+
+def get_cutoff_date(project):
+    newest_event = Event.objects.filter(project=project).order_by('-event_created').values('event_created').first()
+    # if we have no data, fetched past three months.
+    # otherwise, fetch missing data + 1 day overlap.
+    if not newest_event:
+        today = datetime.datetime.now().replace(tzinfo=pytz.UTC)
+        cutoff_date = today - datetime.timedelta(days=DAYS_MAX)
+    else:
+        # go back a bit more than we need to, just in case - it's possible to encounter out-of-order events
+        newest_date = newest_event['event_created'].replace(tzinfo=pytz.UTC)
+        cutoff_date = newest_date - datetime.timedelta(days=1)
+    return cutoff_date
 
 def parseSentryTimestamp(t):
     return datetime.datetime.strptime(t[:-1].split(".")[0], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=pytz.UTC)
