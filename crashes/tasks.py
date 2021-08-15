@@ -45,7 +45,7 @@ def do_all_for_project(project_id):
     # - process_project_counts
     # - process_project_trends
 
-    chain = fetch_project.si(project_id) | process_project_endpoints.si(project_id) | process_stacktraces.si(project_id) | process_project_counts.si(project_id) | process_project_trends.si(project_id)
+    chain = fetch_project.si(project_id) | process_project_endpoints.si(project_id) | process_stacktraces.si(project_id) | process_project_counts.si(project_id) | process_project_event_tag_counts.si(project_id) | process_project_trends.si(project_id)
     chain()
 
 def events_endpoint_and_header(project):
@@ -91,13 +91,10 @@ def process_category_counts(category_id, etk_id):
         etk = EventTagKeyed.objects.get(id=etk_id)
 
     category = Category.objects.get(id=category_id)
-    # cutoff_date = get_cutoff_date(category.project)
+    cutoff_date = get_cutoff_date(category.project)
 
     today = datetime.datetime.now().replace(tzinfo=pytz.UTC)
-    cutoff_date = today - datetime.timedelta(days=DAYS_MAX-1)
-
-    # date_list = [(today - datetime.timedelta(days=x)).date() for x in range((today - cutoff_date).days + 1)]
-    date_list = [(today - datetime.timedelta(days=x)).date() for x in range(DAYS_MAX)]
+    date_list = [(today - datetime.timedelta(days=x)).date() for x in range((today - cutoff_date).days + 1)]
     dates = {d.isoformat(): {'info': 0, 'fatal': 0} for d in date_list}
 
     for group in category.eventgroup_set.filter(project=category.project):
